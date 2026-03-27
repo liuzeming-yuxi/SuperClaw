@@ -284,24 +284,106 @@ fi
 
 ## Part 3: 安装 cc-delegate 桥接层
 
-cc-delegate 是 OpenClaw 调用 Claude Code 的通道。
+cc-delegate 是 OpenClaw 调用 Claude Code 的核心通道。没有它，OpenClaw 无法启动 Claude Code session。
 
-### 3.1 检查是否已安装
+### 3.1 创建运行用户
+
+Claude Code 拒绝在 root 下运行 `--permission-mode bypassPermissions`，必须用非 root 用户：
 
 ```bash
-# 如果 cc-delegate skill 已存在，跳过这步
-ls ~/.openclaw/workspace/skills/cc-delegate/SKILL.md 2>/dev/null && echo "✅ cc-delegate 已安装" || echo "❌ 需要安装"
+# 检查是否已有非 root 用户可用
+id testclaude 2>/dev/null && echo "✅ testclaude 用户已存在" || {
+  echo "创建 testclaude 用户..."
+  sudo useradd -m -s /bin/bash testclaude
+  # 如果需要 docker 权限：
+  # sudo usermod -aG docker testclaude
+}
 ```
 
-### 3.2 安装 cc-delegate（如果没有）
+### 3.2 部署 cc-delegate 脚本
 
-> cc-delegate 的安装需要额外配置（非 root 用户、API 代理地址等），详见 cc-delegate 的独立安装文档。
-> 如果你的 OpenClaw 实例已经能通过 cc-delegate 调用 Claude Code，这步可以跳过。
+```bash
+CC_DELEGATE_DIR="/home/testclaude/cc-delegate"
 
-核心要求：
-- Claude Code 必须以**非 root 用户**运行（Claude Code 拒绝 root + bypassPermissions）
-- 需要配置 `ANTHROPIC_BASE_URL` 和 `ANTHROPIC_AUTH_TOKEN` 环境变量
-- cc-delegate 脚本需要 Node.js 18+
+# 从 superclaw 仓库复制
+sudo -u testclaude mkdir -p "$CC_DELEGATE_DIR"
+sudo cp "$SUPERCLAW_REPO/cc-delegate/cc-delegate.mjs" "$CC_DELEGATE_DIR/"
+sudo chown testclaude:testclaude "$CC_DELEGATE_DIR/cc-delegate.mjs"
+sudo chmod +x "$CC_DELEGATE_DIR/cc-delegate.mjs"
+
+# 创建状态目录
+sudo -u testclaude mkdir -p "$CC_DELEGATE_DIR/state"
+```
+
+### 3.3 配置环境变量
+
+```bash
+# 复制 .env 模板
+sudo cp "$SUPERCLAW_REPO/cc-delegate/.env.example" "$CC_DELEGATE_DIR/.env"
+sudo chown testclaude:testclaude "$CC_DELEGATE_DIR/.env"
+sudo chmod 600 "$CC_DELEGATE_DIR/.env"
+
+# 编辑 .env，填入真实值：
+# ANTHROPIC_BASE_URL=你的API代理地址
+# ANTHROPIC_AUTH_TOKEN=你的API Token
+# CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+sudo nano "$CC_DELEGATE_DIR/.env"
+```
+
+⚠️ 三个环境变量缺一不可。`ANTHROPIC_BASE_URL` 和 `ANTHROPIC_AUTH_TOKEN` 取决于你的 API 代理配置。
+
+### 3.4 安装 cc-delegate OpenClaw Skill
+
+```bash
+# 创建 skill 目录
+CC_SKILL_DIR="${HOME}/.openclaw/workspace/skills/cc-delegate"
+mkdir -p "$CC_SKILL_DIR/references" "$CC_SKILL_DIR/scripts"
+
+# 复制 skill 文件
+cp "$SUPERCLAW_REPO/cc-delegate/SKILL.md" "$CC_SKILL_DIR/"
+cp "$SUPERCLAW_REPO/cc-delegate/references/setup-guide.md" "$CC_SKILL_DIR/references/"
+cp "$SUPERCLAW_REPO/cc-delegate/scripts/cc-delegate.mjs" "$CC_SKILL_DIR/scripts/"
+cp "$SUPERCLAW_REPO/cc-delegate/scripts/setup.sh" "$CC_SKILL_DIR/scripts/"
+```
+
+### 3.5 配置 testclaude 的 Claude Code
+
+```bash
+# Claude Code 需要在 testclaude 用户下有正确的配置
+sudo -u testclaude mkdir -p /home/testclaude/.claude
+
+# 创建 settings.json
+sudo -u testclaude tee /home/testclaude/.claude/settings.json > /dev/null << 'EOF'
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "model": "opus[1m]",
+  "permissions": {
+    "allow": ["*"],
+    "deny": []
+  },
+  "skipDangerousModePermissionPrompt": true,
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true
+  }
+}
+EOF
+```
+
+⚠️ 如果你的 API 代理需要自定义 `apiBaseUrl`，在 settings.json 中添加 `"apiBaseUrl": "你的代理地址"`。
+
+### 3.6 验证 cc-delegate
+
+```bash
+# 测试 status 命令
+node /home/testclaude/cc-delegate/cc-delegate.mjs status
+# 预期：显示 Claude Code 版本和配置状态
+
+# 测试 exec 命令（快速执行）
+node /home/testclaude/cc-delegate/cc-delegate.mjs exec --cwd /tmp --prompt "echo hello"
+# 预期：Claude Code 执行并返回结果
+```
 
 ## Part 4: 环境变量配置
 

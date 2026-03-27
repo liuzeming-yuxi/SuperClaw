@@ -141,19 +141,26 @@ SuperClaw：  人 ↔ OpenClaw ↔ Claude Code
 ```
 superclaw/
 ├── DESIGN.md                    # 完整设计文档（10 章节，42KB）
+├── INSTALL.md                   # Agent-readable 安装指南
 ├── openclaw-skills/             # OpenClaw 侧 Skills
 │   ├── align/SKILL.md           # Phase 1: 产品对齐
 │   ├── plan/SKILL.md            # Phase 2: 技术对齐
 │   ├── execute/SKILL.md         # Phase 3: 执行
 │   ├── verify/SKILL.md          # Phase 4-L2: 验收
 │   └── deliver/SKILL.md         # Phase 5: 交付
+├── cc-delegate/                 # OpenClaw → Claude Code 桥接层
+│   ├── cc-delegate.mjs          # 核心脚本（679 行）
+│   ├── SKILL.md                 # OpenClaw skill 定义
+│   ├── .env.example             # 环境变量模板
+│   ├── references/              # 安装指南
+│   └── scripts/                 # 安装脚本
 ├── claude-code-skills/          # Claude Code 侧 = 直接用 Superpowers
 │   └── README.md
 ├── hooks/                       # Claude Code hooks
 │   ├── superclaw-notify.sh      # Stop → 飞书通知
-│   └── superclaw-progress.sh    # PostToolUse → 进度日志
+│   ├── superclaw-progress.sh    # PostToolUse → 进度日志
+│   └── settings.json.example    # hooks 配置示例
 ├── protocol/                    # 双端通信协议
-├── cc-delegate/                 # OpenClaw → Claude Code 桥接
 └── examples/                    # 端到端示例
 ```
 
