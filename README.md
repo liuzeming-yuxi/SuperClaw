@@ -120,19 +120,21 @@ SuperClaw：  人 ↔ OpenClaw ↔ Claude Code
 
 ## Installation
 
-> 🚧 SuperClaw is under active development. The skill files are ready, packaging as OpenClaw plugin is coming soon.
+> 🚧 SuperClaw is under active development. 一键安装脚本即将推出。
 
-### Manual Setup
+**完整安装指南：[INSTALL.md](INSTALL.md)**
 
-1. Copy `openclaw-skills/*` to your OpenClaw skills directory
-2. Copy `hooks/*` to `~/.superclaw/hooks/` and `chmod +x` them
-3. Add hook configuration to Claude Code's `settings.json` (see [hooks/settings.json.example](hooks/settings.json.example))
-4. Set environment variables in your shell:
+把 INSTALL.md 给任何一个 OpenClaw 实例看，它就能自动完成安装。
 
-```bash
-export SUPERCLAW_FEISHU_TARGET="your_open_id"    # 飞书通知目标
-export SUPERCLAW_STATE_DIR="$PWD/.superclaw"      # 状态文件目录
-```
+### 快速概览
+
+安装三个部分：
+
+1. **OpenClaw 侧** — 克隆仓库 + 链接 skill 文件到 `~/.openclaw/workspace/skills/superclaw/`
+2. **Claude Code 侧** — 安装 Superpowers plugin + 配置 hooks
+3. **桥接层** — cc-delegate（OpenClaw 调用 Claude Code 的通道）
+
+详细步骤、验证命令、故障排查见 [INSTALL.md](INSTALL.md)。
 
 ## Project Structure
 
