@@ -1,0 +1,22 @@
+{
+  "name": "superclaw",
+  "version": "0.1.0",
+  "description": "OpenClaw + Claude Code 的超级编码体。人管方向，OpenClaw 管对齐和验收，Claude Code 管执行。",
+  "type": "module",
+  "license": "MIT",
+  "author": {
+    "name": "Noumena"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://192.168.16.6/yuxi/superclaw.git"
+  },
+  "keywords": [
+    "openclaw",
+    "claude-code",
+    "superpowers",
+    "harness-engineering",
+    "agent-team",
+    "skills"
+  ]
+}

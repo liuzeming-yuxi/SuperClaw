@@ -654,7 +654,7 @@ superclaw/
 ├── README.md
 ├── DESIGN.md                    # 本文件
 │
-├── openclaw-skills/             # OpenClaw 侧 Skills
+├── skills/             # OpenClaw 侧 Skills
 │   ├── align/
 │   │   └── SKILL.md             # Phase 1: 产品对齐
 │   ├── plan/
@@ -666,7 +666,7 @@ superclaw/
 │   └── deliver/
 │       └── SKILL.md             # Phase 4-L3: 人类验收交付
 │
-├── claude-code-skills/          # Claude Code 侧 = 直接装 Superpowers
+├── docs/                           # 文档 = 直接装 Superpowers
 │   └── README.md               # 说明：直接安装 Superpowers，不 fork
 │                                # SuperClaw 只在 hooks/ 里添加通知脚本
 │

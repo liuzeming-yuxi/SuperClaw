@@ -1,0 +1,32 @@
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# State files (runtime generated)
+state/
+.superclaw/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Git worktrees
+.worktrees/
+
+# Claude Code local
+.claude/
+
+# Temp
+*.tmp
+*.bak

@@ -65,7 +65,7 @@ SuperClaw：  人 ↔ OpenClaw ↔ Claude Code
 - `test-driven-development` — TDD 红绿灯
 - `verification-before-completion` — 没跑过不准说完了
 - `code-reviewer` — 6 维代码审查 agent
-- ...完整清单见 [claude-code-skills/README.md](claude-code-skills/README.md)
+- ...完整清单见 [docs/superpowers-integration.md](docs/superpowers-integration.md)
 
 ### Hooks
 
@@ -140,28 +140,47 @@ SuperClaw：  人 ↔ OpenClaw ↔ Claude Code
 
 ```
 superclaw/
-├── DESIGN.md                    # 完整设计文档（10 章节，42KB）
 ├── INSTALL.md                   # Agent-readable 安装指南
-├── openclaw-skills/             # OpenClaw 侧 Skills
+├── CHANGELOG.md                 # 版本变更记录
+├── LICENSE                      # MIT License
+├── package.json                 # 版本号 + 项目元数据
+│
+├── skills/                      # OpenClaw 侧 Skills
 │   ├── align/SKILL.md           # Phase 1: 产品对齐
 │   ├── plan/SKILL.md            # Phase 2: 技术对齐
 │   ├── execute/SKILL.md         # Phase 3: 执行
 │   ├── verify/SKILL.md          # Phase 4-L2: 验收
 │   └── deliver/SKILL.md         # Phase 5: 交付
+│
 ├── cc-delegate/                 # OpenClaw → Claude Code 桥接层
 │   ├── cc-delegate.mjs          # 核心脚本（679 行）
 │   ├── SKILL.md                 # OpenClaw skill 定义
 │   ├── .env.example             # 环境变量模板
 │   ├── references/              # 安装指南
 │   └── scripts/                 # 安装脚本
-├── claude-code-skills/          # Claude Code 侧 = 直接用 Superpowers
-│   └── README.md
+│
 ├── hooks/                       # Claude Code hooks
-│   ├── superclaw-notify.sh      # Stop → 飞书通知
+│   ├── superclaw-notify.sh      # Stop → 飞书通知 + 状态文件
 │   ├── superclaw-progress.sh    # PostToolUse → 进度日志
 │   └── settings.json.example    # hooks 配置示例
-├── protocol/                    # 双端通信协议
-└── examples/                    # 端到端示例
+│
+├── agents/                      # Agent prompts
+│   └── verify-reviewer.md       # L2 验收 reviewer agent
+│
+├── docs/                        # 文档
+│   ├── DESIGN.md                # 完整设计文档（10 章节）
+│   ├── architecture.md          # 架构概览
+│   ├── superpowers-integration.md  # Superpowers 集成说明
+│   └── testing.md               # 测试指南
+│
+├── tests/                       # 测试套件
+│   ├── run-all.sh               # 运行所有测试
+│   ├── install/                 # 安装验证
+│   ├── hooks/                   # Hook 测试
+│   ├── cc-delegate/             # 桥接层测试
+│   └── e2e/                     # 端到端测试
+│
+└── .github/                     # Issue + PR templates
 ```
 
 ## Philosophy

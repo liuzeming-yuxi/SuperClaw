@@ -116,11 +116,11 @@ SKILLEOF
 # 创建 references 目录，链接各阶段 skill
 mkdir -p "$SKILL_DIR/references"
 
-ln -sf "$SUPERCLAW_REPO/openclaw-skills/align/SKILL.md"   "$SKILL_DIR/references/align.md"
-ln -sf "$SUPERCLAW_REPO/openclaw-skills/plan/SKILL.md"    "$SKILL_DIR/references/plan.md"
-ln -sf "$SUPERCLAW_REPO/openclaw-skills/execute/SKILL.md" "$SKILL_DIR/references/execute.md"
-ln -sf "$SUPERCLAW_REPO/openclaw-skills/verify/SKILL.md"  "$SKILL_DIR/references/verify.md"
-ln -sf "$SUPERCLAW_REPO/openclaw-skills/deliver/SKILL.md" "$SKILL_DIR/references/deliver.md"
+ln -sf "$SUPERCLAW_REPO/skills/align/SKILL.md"   "$SKILL_DIR/references/align.md"
+ln -sf "$SUPERCLAW_REPO/skills/plan/SKILL.md"    "$SKILL_DIR/references/plan.md"
+ln -sf "$SUPERCLAW_REPO/skills/execute/SKILL.md" "$SKILL_DIR/references/execute.md"
+ln -sf "$SUPERCLAW_REPO/skills/verify/SKILL.md"  "$SKILL_DIR/references/verify.md"
+ln -sf "$SUPERCLAW_REPO/skills/deliver/SKILL.md" "$SKILL_DIR/references/deliver.md"
 ```
 
 ### 1.5 验证 OpenClaw 侧安装
@@ -133,11 +133,11 @@ ls -la "$SKILL_DIR/references/"
 # 预期输出：
 # SKILL.md
 # references/
-#   align.md -> .../openclaw-skills/align/SKILL.md
-#   plan.md -> .../openclaw-skills/plan/SKILL.md
-#   execute.md -> .../openclaw-skills/execute/SKILL.md
-#   verify.md -> .../openclaw-skills/verify/SKILL.md
-#   deliver.md -> .../openclaw-skills/deliver/SKILL.md
+#   align.md -> .../skills/align/SKILL.md
+#   plan.md -> .../skills/plan/SKILL.md
+#   execute.md -> .../skills/execute/SKILL.md
+#   verify.md -> .../skills/verify/SKILL.md
+#   deliver.md -> .../skills/deliver/SKILL.md
 ```
 
 ## Part 2: 安装 Claude Code 侧
