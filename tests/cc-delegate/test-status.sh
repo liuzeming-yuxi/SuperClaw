@@ -68,12 +68,13 @@ fi
 
 echo "Test 4: Session list"
 
-OUTPUT=$(node "$CC_DELEGATE" session list 2>&1) || true
+EXIT_CODE=0
+OUTPUT=$(node "$CC_DELEGATE" session list 2>&1) || EXIT_CODE=$?
 
-if [ $? -eq 0 ] || echo "$OUTPUT" | grep -qi "session\|no.*session\|empty\|\[\]"; then
+if [ $EXIT_CODE -eq 0 ] || echo "$OUTPUT" | grep -qi "session\|no.*session\|empty\|\[\]"; then
   pass "Session list command works"
 else
-  fail "Session list failed: $OUTPUT"
+  fail "Session list failed (exit=$EXIT_CODE): $OUTPUT"
 fi
 
 echo ""
