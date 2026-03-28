@@ -4,7 +4,7 @@
 # Run as root on the target machine.
 set -euo pipefail
 
-DELEGATE_USER="${CC_DELEGATE_USER:-ccdelegate}"
+DELEGATE_USER="${CC_DELEGATE_USER:-testclaude}"
 INSTALL_DIR="/home/${DELEGATE_USER}/cc-delegate"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -48,7 +48,7 @@ fi
 # ─── Install wrapper ─────────────────────────────────────────────────────────
 
 mkdir -p "${INSTALL_DIR}/state"
-cp "${SCRIPT_DIR}/cc-delegate.mjs" "${INSTALL_DIR}/cc-delegate.mjs"
+cp "${SCRIPT_DIR}/../cc-delegate.mjs" "${INSTALL_DIR}/cc-delegate.mjs"
 chmod +x "${INSTALL_DIR}/cc-delegate.mjs"
 
 # ─── Generate .env template ──────────────────────────────────────────────────

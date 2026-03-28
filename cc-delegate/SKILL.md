@@ -28,12 +28,12 @@ First-time setup required. Run as root:
 bash <skill-dir>/scripts/setup.sh
 ```
 
-Then edit `/home/ccdelegate/cc-delegate/.env` with API credentials.
+Then edit `/home/testclaude/cc-delegate/.env` with API credentials.
 See `references/setup-guide.md` for details or manual setup.
 
 ## Configuration
 
-The delegate user name defaults to `ccdelegate`. Override with `CC_DELEGATE_USER` env var during setup.
+The delegate user name defaults to `testclaude`. Override with `CC_DELEGATE_USER` env var during setup.
 
 The wrapper script lives at `/home/<user>/cc-delegate/cc-delegate.mjs`.
 Adjust the path below if your delegate user differs.

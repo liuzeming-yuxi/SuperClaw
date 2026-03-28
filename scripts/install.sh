@@ -201,7 +201,9 @@ else
 
     if ! $DRY_RUN; then
       # Check if hooks already configured
-      if jq -e '.hooks.Stop[]? | select(.command | contains("superclaw"))' "$CLAUDE_SETTINGS" &>/dev/null; then
+      STOP_EXISTS=$(jq -e '.hooks.Stop[]? | select(.command | contains("superclaw"))' "$CLAUDE_SETTINGS" 2>/dev/null && echo yes || echo no)
+      PTU_EXISTS=$(jq -e '.hooks.PostToolUse[]? | select(.command | contains("superclaw"))' "$CLAUDE_SETTINGS" 2>/dev/null && echo yes || echo no)
+      if [[ "$STOP_EXISTS" == "yes" ]] && [[ "$PTU_EXISTS" == "yes" ]]; then
         warn "SuperClaw hooks already in settings.json — skipping"
       else
         jq --arg notify "$HOOKS_DIR/superclaw-notify.sh" \
@@ -260,8 +262,8 @@ else
   done
   [[ -f "$REPO_DIR/cc-delegate/references/setup-guide.md" ]] && \
     run cp "$REPO_DIR/cc-delegate/references/setup-guide.md" "$CC_SKILL_DIR/references/"
-  [[ -f "$REPO_DIR/cc-delegate/scripts/cc-delegate.mjs" ]] && \
-    run cp "$REPO_DIR/cc-delegate/scripts/cc-delegate.mjs" "$CC_SKILL_DIR/scripts/"
+  [[ -f "$REPO_DIR/cc-delegate/cc-delegate.mjs" ]] && \
+    run cp "$REPO_DIR/cc-delegate/cc-delegate.mjs" "$CC_SKILL_DIR/scripts/"
   [[ -f "$REPO_DIR/cc-delegate/scripts/setup.sh" ]] && \
     run cp "$REPO_DIR/cc-delegate/scripts/setup.sh" "$CC_SKILL_DIR/scripts/"
   ok "Installed cc-delegate skill to $CC_SKILL_DIR"
