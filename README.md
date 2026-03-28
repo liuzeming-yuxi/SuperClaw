@@ -120,21 +120,13 @@ SuperClaw：  人 ↔ OpenClaw ↔ Claude Code
 
 ## Installation
 
-> 🚧 SuperClaw is under active development. 一键安装脚本即将推出。
+```bash
+git clone http://192.168.16.6/yuxi/superclaw.git
+cd superclaw
+sudo bash scripts/install.sh
+```
 
-**完整安装指南：[INSTALL.md](INSTALL.md)**
-
-把 INSTALL.md 给任何一个 OpenClaw 实例看，它就能自动完成安装。
-
-### 快速概览
-
-安装三个部分：
-
-1. **OpenClaw 侧** — 克隆仓库 + 链接 skill 文件到 `~/.openclaw/workspace/skills/superclaw/`
-2. **Claude Code 侧** — 安装 Superpowers plugin + 配置 hooks
-3. **桥接层** — cc-delegate（OpenClaw 调用 Claude Code 的通道）
-
-详细步骤、验证命令、故障排查见 [INSTALL.md](INSTALL.md)。
+安装脚本自动完成所有配置。详细选项和故障排查见 [INSTALL.md](INSTALL.md)。
 
 ## Project Structure
 
