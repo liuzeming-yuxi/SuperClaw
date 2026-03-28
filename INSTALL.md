@@ -19,7 +19,7 @@
 
 ```bash
 # 1. 克隆仓库
-git clone http://192.168.16.6/yuxi/superclaw.git
+git clone https://github.com/noumena-ai/superclaw.git
 cd superclaw
 
 # 2. 运行安装脚本（需要 root 权限以创建 cc-delegate 用户）
@@ -143,7 +143,7 @@ rm -rf ~/.superclaw
 如果你是 OpenClaw 实例，按以下步骤安装：
 
 1. 确认前置条件（`node --version`, `jq --version`, `openclaw --version`）
-2. 克隆仓库：`git clone http://192.168.16.6/yuxi/superclaw.git`
+2. 克隆仓库：`git clone https://github.com/noumena-ai/superclaw.git`
 3. 执行安装：`sudo bash scripts/install.sh`
 4. 编辑 `.env`：`sudo nano /home/testclaude/cc-delegate/.env`
 5. 验证：`bash tests/run-all.sh`

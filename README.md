@@ -1,5 +1,9 @@
 # SuperClaw
 
+> **SuperClaw** is a harness-engineering project that connects [OpenClaw](https://github.com/openclaw/openclaw) (an AI assistant platform) with [Claude Code](https://docs.anthropic.com/en/docs/claude-code) to form a two-layer autonomous coding agent. The human sets direction, OpenClaw handles alignment and acceptance testing, and Claude Code handles execution. Built on top of [Superpowers](https://github.com/obra/superpowers).
+
+---
+
 > OpenClaw + Claude Code 的超级编码体。
 > 人管方向，OpenClaw 管对齐和验收，Claude Code 管执行。
 
@@ -121,7 +125,7 @@ SuperClaw：  人 ↔ OpenClaw ↔ Claude Code
 ## Installation
 
 ```bash
-git clone http://192.168.16.6/yuxi/superclaw.git
+git clone https://github.com/noumena-ai/superclaw.git
 cd superclaw
 sudo bash scripts/install.sh
 ```
