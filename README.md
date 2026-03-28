@@ -126,7 +126,7 @@ SuperClaw：  人 ↔ OpenClaw ↔ Claude Code
 ## Installation
 
 ```bash
-git clone https://github.com/noumena-ai/superclaw.git
+git clone https://github.com/liuzeming-yuxi/SuperClaw.git
 cd superclaw
 sudo bash scripts/install.sh
 ```
