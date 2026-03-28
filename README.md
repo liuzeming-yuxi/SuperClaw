@@ -52,6 +52,7 @@ SuperClaw：  人 ↔ OpenClaw ↔ Claude Code
 
 | Skill | 阶段 | 做什么 |
 |---|---|---|
+| `using-superclaw` | 元 skill | 教 OpenClaw 理解自己的角色和边界：产品脑+验收脑，不是执行脑 |
 | `align` | Phase 1 | 把模糊需求变成结构化 spec。一次一问，2-3 方案推荐，逐部分确认 |
 | `plan` | Phase 2 | 把 spec 交给 Claude Code 规划。OpenClaw 做 review 桥梁 |
 | `execute` | Phase 3 | 启动 Claude Code 自治执行。不微操，等结果 |
