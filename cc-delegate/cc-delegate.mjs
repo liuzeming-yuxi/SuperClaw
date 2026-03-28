@@ -38,6 +38,24 @@ function info(msg) {
   process.stderr.write(`[cc-delegate] ${msg}\n`);
 }
 
+/** Strip surrounding quotes (single or double) from a value string. */
+function stripQuotes(val) {
+  if (val.length >= 2) {
+    if ((val[0] === '"' && val.at(-1) === '"') || (val[0] === "'" && val.at(-1) === "'")) {
+      return val.slice(1, -1);
+    }
+  }
+  return val;
+}
+
+/** Reject .env values that contain shell metacharacters to prevent injection. */
+const SHELL_META_RE = /[;|`$(){}!<>&\n\r]/;
+function validateEnvValue(key, val) {
+  if (SHELL_META_RE.test(val)) {
+    throw new Error(`Unsafe character in .env value for ${key}. Remove shell metacharacters (;|$\`&<>(){}) from the value.`);
+  }
+}
+
 // ─── Root → testclaude re-exec ───────────────────────────────────────────────
 
 function reExecAsDelegate() {
@@ -48,7 +66,14 @@ function reExecAsDelegate() {
       .split("\n")
       .map((l) => l.trim())
       .filter((l) => l && !l.startsWith("#") && l.includes("="))
-      .map((l) => `export ${l}`)
+      .map((l) => {
+        const idx = l.indexOf("=");
+        const key = l.slice(0, idx);
+        const val = stripQuotes(l.slice(idx + 1));
+        validateEnvValue(key, val);
+        // Wrap value in single quotes to prevent shell expansion
+        return `export ${key}='${val.replace(/'/g, "'\\''")}'`;
+      })
       .join("; ");
   }
   if (!envExports) {
@@ -93,7 +118,8 @@ function ensureEnv() {
         .forEach((l) => {
           const idx = l.indexOf("=");
           const key = l.slice(0, idx);
-          const val = l.slice(idx + 1);
+          const val = stripQuotes(l.slice(idx + 1));
+          validateEnvValue(key, val);
           if (!process.env[key]) {
             process.env[key] = val;
           }
@@ -674,6 +700,14 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  fail(err instanceof Error ? err.message : String(err));
-});
+// ─── Exports (for testing) ───────────────────────────────────────────────────
+
+export { parseArgs, ensureEnv, classifyPromptState, scopeKey, stripQuotes, validateEnvValue };
+
+// Only run main() when executed directly (not when imported for testing)
+const isMainModule = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMainModule) {
+  main().catch((err) => {
+    fail(err instanceof Error ? err.message : String(err));
+  });
+}
