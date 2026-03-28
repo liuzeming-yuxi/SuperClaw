@@ -4,7 +4,7 @@
 
 - Linux server with root access
 - Node.js 18+
-- Claude Code CLI (`npm install -g @anthropic-ai/claude-code`)
+- Claude Code CLI (`curl -fsSL https://claude.ai/install.sh | bash`)
 - An Anthropic API key or compatible proxy
 
 ## Quick Setup (Automated)

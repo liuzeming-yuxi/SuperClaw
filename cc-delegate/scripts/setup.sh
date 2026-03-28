@@ -88,7 +88,7 @@ if su - "${DELEGATE_USER}" -c "which claude" &>/dev/null; then
   ok "Claude Code already installed (${CLAUDE_VERSION})"
 else
   info "Installing Claude Code..."
-  npm install -g @anthropic-ai/claude-code@latest
+  curl -fsSL https://claude.ai/install.sh | bash
   ok "Claude Code installed"
 fi
 

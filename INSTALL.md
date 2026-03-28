@@ -13,7 +13,7 @@
 
 缺什么装什么：
 - jq: `apt install jq` / `brew install jq`
-- Claude Code: `npm install -g @anthropic-ai/claude-code@latest`
+- Claude Code: `curl -fsSL https://claude.ai/install.sh | bash`
 
 ## 一键安装
 
