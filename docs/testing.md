@@ -35,7 +35,7 @@ bash tests/hooks/test-progress.sh
 # Installation verification
 bash tests/install/verify-install.sh
 
-# cc-delegate tests (requires testclaude user + cc-delegate installed)
+# cc-delegate tests (requires cc-delegate installed at /root/cc-delegate/)
 bash tests/cc-delegate/test-status.sh
 ```
 
@@ -43,7 +43,7 @@ bash tests/cc-delegate/test-status.sh
 
 1. **Hook tests are pure** — no external dependencies, create temp dirs, clean up after
 2. **Install tests are diagnostic** — check actual system state, report what's missing
-3. **cc-delegate tests need infra** — require testclaude user and deployed scripts
+3. **cc-delegate tests need infra** — require cc-delegate deployed at /root/cc-delegate/
 4. **E2E tests are manual** — guided by README, run through the full SuperClaw flow
 
 ## Writing New Tests

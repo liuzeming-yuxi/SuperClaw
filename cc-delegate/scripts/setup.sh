@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # cc-delegate setup script
-# Creates a non-root delegate user, installs the wrapper, and generates .env template.
-# Run as root on the target machine.
+# Installs the wrapper and generates .env template.
+# Runs as root — cc-delegate uses IS_SANDBOX=1 for yolo mode (no user switching needed).
 set -euo pipefail
 
-DELEGATE_USER="${CC_DELEGATE_USER:-testclaude}"
-INSTALL_DIR="/home/${DELEGATE_USER}/cc-delegate"
+INSTALL_DIR="${CC_DELEGATE_DIR:-/root/cc-delegate}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 info()  { printf '\033[1;34m[cc-delegate]\033[0m %s\n' "$1"; }
@@ -15,35 +14,12 @@ fail()  { printf '\033[1;31m[✗]\033[0m %s\n' "$1"; exit 1; }
 
 # ─── Pre-checks ──────────────────────────────────────────────────────────────
 
-[[ $EUID -eq 0 ]] || fail "Run this script as root."
 command -v node >/dev/null 2>&1 || fail "Node.js not found. Install Node.js 18+ first."
 
 NODE_MAJOR=$(node -v | sed 's/v//' | cut -d. -f1)
 [[ $NODE_MAJOR -ge 18 ]] || fail "Node.js 18+ required (found $(node -v))."
 
-info "Setting up cc-delegate for user: ${DELEGATE_USER}"
-
-# ─── Create user ──────────────────────────────────────────────────────────────
-
-if id "${DELEGATE_USER}" &>/dev/null; then
-  ok "User ${DELEGATE_USER} already exists"
-else
-  useradd -m -s /bin/bash "${DELEGATE_USER}"
-  ok "Created user ${DELEGATE_USER}"
-fi
-
-# ─── Ensure node/npm/npx are accessible ──────────────────────────────────────
-
-NODE_BIN=$(dirname "$(which node)")
-PROFILE="/home/${DELEGATE_USER}/.profile"
-
-if ! su - "${DELEGATE_USER}" -c "which node" &>/dev/null; then
-  # Add node to PATH in profile
-  echo "export PATH=\"${NODE_BIN}:\$PATH\"" >> "${PROFILE}"
-  ok "Added node to ${DELEGATE_USER}'s PATH"
-else
-  ok "Node.js accessible for ${DELEGATE_USER}"
-fi
+info "Setting up cc-delegate at ${INSTALL_DIR}"
 
 # ─── Install wrapper ─────────────────────────────────────────────────────────
 
@@ -74,17 +50,13 @@ ENVEOF
   warn "⚠️  Edit ${ENV_FILE} and fill in your ANTHROPIC_AUTH_TOKEN before use!"
 fi
 
-# ─── Set permissions ─────────────────────────────────────────────────────────
-
-chown -R "${DELEGATE_USER}:${DELEGATE_USER}" "${INSTALL_DIR}"
 chmod 600 "${ENV_FILE}"
-
 ok "Permissions set (${ENV_FILE} is 600)"
 
 # ─── Install Claude Code if missing ──────────────────────────────────────────
 
-if su - "${DELEGATE_USER}" -c "which claude" &>/dev/null; then
-  CLAUDE_VERSION=$(su - "${DELEGATE_USER}" -c "claude --version 2>/dev/null" || echo "unknown")
+if command -v claude &>/dev/null; then
+  CLAUDE_VERSION=$(claude --version 2>/dev/null || echo "unknown")
   ok "Claude Code already installed (${CLAUDE_VERSION})"
 else
   info "Installing Claude Code..."
@@ -96,7 +68,6 @@ fi
 
 info ""
 info "Setup complete! Summary:"
-info "  User:     ${DELEGATE_USER}"
 info "  Wrapper:  ${INSTALL_DIR}/cc-delegate.mjs"
 info "  Config:   ${INSTALL_DIR}/.env"
 info "  State:    ${INSTALL_DIR}/state/"

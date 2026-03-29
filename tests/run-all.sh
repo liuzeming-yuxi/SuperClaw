@@ -47,8 +47,8 @@ run_suite "Hook: progress" "$SCRIPT_DIR/hooks/test-progress.sh"
 # Install verification (checks actual installation state)
 run_suite "Install verification" "$SCRIPT_DIR/install/verify-install.sh"
 
-# cc-delegate tests (requires testclaude user + cc-delegate installed)
-if [ -f "/home/testclaude/cc-delegate/cc-delegate.mjs" ]; then
+# cc-delegate tests (requires cc-delegate installed)
+if [ -f "/root/cc-delegate/cc-delegate.mjs" ]; then
   run_suite "cc-delegate: status" "$SCRIPT_DIR/cc-delegate/test-status.sh"
 else
   echo ""

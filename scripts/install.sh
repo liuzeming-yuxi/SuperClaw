@@ -6,7 +6,6 @@
 #   --repo-dir DIR       SuperClaw repo location (default: auto-detect from script location)
 #   --skip-cc-delegate   Skip cc-delegate installation (install OpenClaw skills + hooks only)
 #   --skip-hooks         Skip Claude Code hook configuration
-#   --delegate-user USER Non-root user for Claude Code (default: testclaude)
 #   --dry-run            Print what would be done without doing it
 #   --help               Show this help
 #
@@ -24,7 +23,6 @@ SKILL_DIR="${HOME}/.openclaw/workspace/skills/superclaw"
 CC_SKILL_DIR="${HOME}/.openclaw/workspace/skills/cc-delegate"
 HOOKS_DIR="${HOME}/.superclaw/hooks"
 STATE_DIR="${HOME}/.superclaw/state"
-DELEGATE_USER="testclaude"
 SKIP_CC_DELEGATE=false
 SKIP_HOOKS=false
 DRY_RUN=false
@@ -44,7 +42,6 @@ while [[ $# -gt 0 ]]; do
     --repo-dir)       REPO_DIR="$2"; shift 2 ;;
     --skip-cc-delegate) SKIP_CC_DELEGATE=true; shift ;;
     --skip-hooks)     SKIP_HOOKS=true; shift ;;
-    --delegate-user)  DELEGATE_USER="$2"; shift 2 ;;
     --dry-run)        DRY_RUN=true; shift ;;
     --help)
       head -20 "$0" | grep '^#' | sed 's/^# \?//'
@@ -240,16 +237,11 @@ else
   CC_SETUP="$REPO_DIR/cc-delegate/scripts/setup.sh"
 
   if [[ -f "$CC_SETUP" ]]; then
-    if [[ $EUID -eq 0 ]]; then
-      info "Running cc-delegate setup as root (delegate user: $DELEGATE_USER)..."
-      if $DRY_RUN; then
-        echo "  [dry-run] CC_DELEGATE_USER=$DELEGATE_USER bash $CC_SETUP"
-      else
-        CC_DELEGATE_USER="$DELEGATE_USER" bash "$CC_SETUP"
-      fi
+    info "Running cc-delegate setup..."
+    if $DRY_RUN; then
+      echo "  [dry-run] bash $CC_SETUP"
     else
-      warn "cc-delegate setup requires root. Run with sudo or as root."
-      warn "Or run separately: sudo CC_DELEGATE_USER=$DELEGATE_USER bash $CC_SETUP"
+      bash "$CC_SETUP"
     fi
   else
     fail "cc-delegate setup script not found: $CC_SETUP"

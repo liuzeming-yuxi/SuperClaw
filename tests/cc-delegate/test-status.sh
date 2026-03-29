@@ -3,7 +3,7 @@
 #
 # Usage: bash tests/cc-delegate/test-status.sh
 #
-# Prerequisites: cc-delegate installed, testclaude user exists
+# Prerequisites: cc-delegate installed at /root/cc-delegate/
 
 set -euo pipefail
 
@@ -13,7 +13,7 @@ FAIL=0
 pass() { echo "  ✅ $1"; ((PASS++)) || true; }
 fail() { echo "  ❌ $1"; ((FAIL++)) || true; }
 
-CC_DELEGATE="/home/testclaude/cc-delegate/cc-delegate.mjs"
+CC_DELEGATE="/root/cc-delegate/cc-delegate.mjs"
 
 echo "🧪 Testing cc-delegate status"
 echo ""
@@ -46,7 +46,7 @@ fi
 
 echo "Test 3: .env configuration"
 
-ENV_FILE="/home/testclaude/cc-delegate/.env"
+ENV_FILE="/root/cc-delegate/.env"
 
 if [ -f "$ENV_FILE" ]; then
   MISSING=""

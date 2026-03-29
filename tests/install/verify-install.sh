@@ -87,8 +87,8 @@ echo ""
 
 echo "## cc-delegate Bridge"
 
-CC_DELEGATE="/home/testclaude/cc-delegate/cc-delegate.mjs"
-CC_ENV="/home/testclaude/cc-delegate/.env"
+CC_DELEGATE="/root/cc-delegate/cc-delegate.mjs"
+CC_ENV="/root/cc-delegate/.env"
 
 if [ -f "$CC_DELEGATE" ]; then
   pass "cc-delegate script exists"
@@ -107,10 +107,10 @@ else
   fail ".env not found at $CC_ENV"
 fi
 
-if id testclaude &>/dev/null; then
-  pass "testclaude user exists"
+if [ "$(id -u)" = "0" ]; then
+  pass "Running as root (IS_SANDBOX=1 mode)"
 else
-  fail "testclaude user not found"
+  warn "Not running as root — cc-delegate expects root + IS_SANDBOX=1"
 fi
 
 echo ""

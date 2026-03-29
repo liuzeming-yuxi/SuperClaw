@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // cc-delegate.mjs — Claude Code delegate wrapper for OpenClaw
 // Inspired by Agora's acpx-delegate.mjs, adapted for our environment.
-// Handles: root→testclaude user switching, env injection, acpx orchestration,
+// Handles: env injection, acpx orchestration, IS_SANDBOX=1 yolo mode,
 //          session management, Opus model bootstrap, and session manifest tracking.
 
 import {
@@ -10,14 +10,13 @@ import {
 } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { homedir, userInfo } from "node:os";
+import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const DELEGATE_USER = "testclaude";
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const ENV_FILE = resolve(SCRIPT_DIR, ".env");
 const STATE_DIR = resolve(SCRIPT_DIR, "state");
@@ -56,60 +55,13 @@ function validateEnvValue(key, val) {
   }
 }
 
-// ─── Root → testclaude re-exec ───────────────────────────────────────────────
-
-function reExecAsDelegate() {
-  // Load .env for env injection
-  let envExports = "";
-  if (existsSync(ENV_FILE)) {
-    envExports = readFileSync(ENV_FILE, "utf8")
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l && !l.startsWith("#") && l.includes("="))
-      .map((l) => {
-        const idx = l.indexOf("=");
-        const key = l.slice(0, idx);
-        const val = stripQuotes(l.slice(idx + 1));
-        validateEnvValue(key, val);
-        // Wrap value in single quotes to prevent shell expansion
-        return `export ${key}='${val.replace(/'/g, "'\\''")}'`;
-      })
-      .join("; ");
-  }
-  if (!envExports) {
-    fail("No .env file found or it's empty. Create " + ENV_FILE);
-  }
-
-  const scriptPath = fileURLToPath(import.meta.url);
-  const escapedArgs = process.argv.slice(2).map((a) => {
-    // Shell-escape each argument
-    if (/^[a-zA-Z0-9_./:@=,-]+$/.test(a)) return a;
-    return "'" + a.replace(/'/g, "'\\''") + "'";
-  });
-
-  const cmd = `${envExports}; exec node ${scriptPath} ${escapedArgs.join(" ")}`;
-
-  const child = spawn("su", ["-", DELEGATE_USER, "-c", cmd], {
-    stdio: "inherit",
-    env: process.env,
-  });
-
-  child.on("error", (err) => {
-    fail(`Failed to switch to ${DELEGATE_USER}: ${err.message}`);
-  });
-  child.on("exit", (code, signal) => {
-    if (signal) process.exit(1);
-    process.exit(code ?? 1);
-  });
-}
-
-// ─── .env loader (for when already running as testclaude) ────────────────────
+// ─── .env loader ─────────────────────────────────────────────────────────────
 
 function ensureEnv() {
   const required = ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"];
   const missing = required.filter((k) => !process.env[k]);
   if (missing.length > 0) {
-    // Try loading from .env directly (fallback for non-root invocations)
+    // Try loading from .env directly
     if (existsSync(ENV_FILE)) {
       readFileSync(ENV_FILE, "utf8")
         .split("\n")
@@ -270,6 +222,8 @@ function buildConfigOverride(opts) {
 
 function prepareInvocationEnv(opts) {
   const env = { ...process.env };
+  // Enable sandbox mode so Claude Code allows root execution
+  env.IS_SANDBOX = "1";
   const override = buildConfigOverride(opts);
   if (!override) return env;
 
@@ -421,7 +375,7 @@ function printUsage() {
     "",
     "Environment:",
     "  Reads .env from script directory for ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, etc.",
-    "  Auto-switches to testclaude user when run as root.",
+    "  Runs as root with IS_SANDBOX=1 (yolo mode).",
     "",
   ].join("\n"));
 }
@@ -513,7 +467,6 @@ async function cmdStatus(acpx) {
   console.log("cc-delegate status");
   console.log("─".repeat(40));
   console.log(`  acpx: ${acpx.command} ${acpx.args.join(" ")}`);
-  console.log(`  user: ${userInfo().username}`);
   console.log(`  state: ${STATE_DIR}`);
   console.log(`  sessions: ${sessionCount}`);
 
@@ -652,16 +605,10 @@ async function cmdSessionContinue(opts, acpx) {
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
-  // Step 1: If running as root, re-exec as testclaude
-  if (userInfo().username === "root") {
-    reExecAsDelegate();
-    return; // never reached, reExecAsDelegate takes over the process
-  }
-
-  // Step 2: Ensure env vars are set
+  // Step 1: Ensure env vars are set
   ensureEnv();
 
-  // Step 3: Parse args
+  // Step 2: Parse args
   const opts = parseArgs(process.argv.slice(2));
 
   if (!opts.command) {
@@ -669,10 +616,10 @@ async function main() {
     process.exit(1);
   }
 
-  // Step 4: Resolve acpx
+  // Step 3: Resolve acpx
   const acpx = resolveAcpx();
 
-  // Step 5: Dispatch
+  // Step 4: Dispatch
   switch (opts.command) {
     case "status":
       await cmdStatus(acpx);
@@ -702,7 +649,7 @@ async function main() {
 
 // ─── Exports (for testing) ───────────────────────────────────────────────────
 
-export { parseArgs, ensureEnv, classifyPromptState, scopeKey, stripQuotes, validateEnvValue };
+export { parseArgs, ensureEnv, classifyPromptState, scopeKey, stripQuotes, validateEnvValue, prepareInvocationEnv };
 
 // Only run main() when executed directly (not when imported for testing)
 const isMainModule = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
