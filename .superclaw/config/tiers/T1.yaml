@@ -1,0 +1,19 @@
+name: "T1 — Partner / Preview"
+description: "合作伙伴或预览功能，安全+可观测性+自动化测试"
+checklist:
+  - id: tests
+    name: "自动化测试通过"
+    verify: "npm test"
+    required: true
+  - id: security
+    name: "安全扫描"
+    verify: "npm audit --production"
+    required: true
+  - id: lint
+    name: "代码 lint"
+    verify: "npm run lint"
+    required: true
+  - id: observability
+    name: "可观测性检查"
+    verify: null
+    required: true

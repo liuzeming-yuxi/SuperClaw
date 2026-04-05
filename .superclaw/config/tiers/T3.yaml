@@ -1,0 +1,11 @@
+name: "T3 — Dev Scripts"
+description: "开发脚本、文档、配置，最小检查"
+checklist:
+  - id: syntax
+    name: "语法/格式检查"
+    verify: "npm run lint -- --fix"
+    required: true
+  - id: self_review
+    name: "AI 自审"
+    verify: null
+    required: true

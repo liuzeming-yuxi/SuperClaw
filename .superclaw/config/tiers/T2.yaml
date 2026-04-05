@@ -1,0 +1,11 @@
+name: "T2 — Internal Tools"
+description: "内部工具，基本检查：单元测试+lint"
+checklist:
+  - id: tests
+    name: "单元测试通过"
+    verify: "npm test"
+    required: true
+  - id: lint
+    name: "代码 lint"
+    verify: "npm run lint"
+    required: true

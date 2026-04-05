@@ -1,0 +1,31 @@
+name: "T0 — Production Core"
+description: "生产核心路径，完整检查"
+checklist:
+  - id: tdd
+    name: "TDD 测试全通过"
+    verify: "npm test"
+    required: true
+  - id: e2e
+    name: "E2E 端到端测试"
+    verify: "npm run test:e2e"
+    required: true
+  - id: security
+    name: "安全扫描"
+    verify: "npm audit --production"
+    required: true
+  - id: lint
+    name: "代码 lint"
+    verify: "npm run lint"
+    required: true
+  - id: type_check
+    name: "类型检查"
+    verify: "npm run typecheck"
+    required: true
+  - id: manual_review
+    name: "人工 code review"
+    verify: null
+    required: true
+  - id: observability
+    name: "可观测性检查（日志、metrics、告警）"
+    verify: null
+    required: true
