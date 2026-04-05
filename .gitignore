@@ -5,7 +5,10 @@
 
 # State files (runtime generated)
 state/
-.superclaw/
+
+# SuperClaw board — track structure, config, and tools; ignore runtime state
+!.superclaw/
+.superclaw/state/
 
 # OS
 .DS_Store
