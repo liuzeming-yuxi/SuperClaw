@@ -19,6 +19,16 @@ description: |
 - verify 阶段已 PASS / PASS_WITH_NOTES
 - 验证报告已生成
 
+## Board Integration
+
+> 以下 board 操作仅在 `.superclaw/board/` 存在时执行。没有 board 时 skill 正常运行。
+
+| 时机 | Board 操作 | 命令 |
+|------|-----------|------|
+| 用户 approve | 从 reviewing 移到 done | `board-move.sh {task} reviewing done "用户 approved"` |
+| 用户要调整 | 移回 executing 或 planned | `board-move.sh {task} reviewing {target} "用户要调整: ..."` |
+| 用户丢弃 | 从 reviewing 移到 done | `board-move.sh {task} reviewing done "用户丢弃"` |
+
 ## 流程
 
 ```

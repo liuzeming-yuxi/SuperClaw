@@ -20,32 +20,62 @@ description: |
 绝不写代码。
 </HARD-GATE>
 
+## Board Integration
+
+> 以下 board 操作仅在 `.superclaw/board/` 存在时执行。没有 board 时 skill 正常运行。
+
+| 时机 | Board 操作 | 命令 |
+|------|-----------|------|
+| 开始对齐 | 从 inbox 移到 aligning | `board-move.sh {task} inbox aligning "开始对齐"` |
+| 写完 spec | 更新任务文件 spec_path | `set_frontmatter spec_path <path>` |
+| 确定 tier | 更新任务文件 tier | `set_frontmatter tier <tier>` |
+| 用户 approve | 从 aligning 移到 planned | `board-move.sh {task} aligning planned "spec approved"` |
+
+### 如何找到当前任务
+
+1. 如果用户指定了任务 ID → 在 `board/inbox/` 中找到对应文件
+2. 如果没指定 → 列出 inbox 中的任务，让用户选或自动取最早的
+3. 如果 inbox 为空 → 先用 `board-create.sh` 创建任务
+
+### Phase 0 检查
+
+开始时检查 `.superclaw/context/project-context.md` 是否存在：
+- 存在 → 读取，作为上下文
+- 不存在 → 先 invoke `superclaw:onboard`，再继续
+
 ## Checklist
 
 必须按顺序完成：
 
-1. **探索项目上下文** — 读代码、文档、最近 commit、README
-2. **问澄清问题** — 一次一问，理解目的/约束/成功标准
-3. **提出 2-3 方案** — 带权衡和推荐
-4. **逐部分展示设计** — 每部分确认后再往下
-5. **写 spec.md** — 保存到项目目录
-6. **Spec 自审** — 检查占位符、矛盾、模糊点、范围
-7. **用户 review spec** — 等用户确认
-8. **转入 plan** — invoke superclaw:plan
+1. **检查 project-context.md** — 不存在则先触发 onboard
+2. **探索项目上下文** — 读代码、文档、最近 commit、README + project-context.md
+3. **Board: 取任务** — 从 inbox 取任务并移到 aligning（如有 board）
+4. **问澄清问题** — 一次一问，理解目的/约束/成功标准
+5. **提出 2-3 方案** — 带权衡和推荐
+6. **逐部分展示设计** — 每部分确认后再往下
+7. **确定 Delivery Tier** — 建议 tier，用户确认（如有 board）
+8. **写 spec.md** — 保存到项目目录，更新任务 spec_path
+9. **Spec 自审** — 检查占位符、矛盾、模糊点、范围
+10. **用户 review spec** — 等用户确认
+11. **Board: 移到 planned** — 从 aligning 移到 planned（如有 board）
+12. **转入 plan** — invoke superclaw:plan
 
 ## 流程
 
 ```
-探索上下文 → 问澄清问题（一次一问，循环）
+检查 project-context.md → 不存在？invoke onboard
+  → Board: 取任务（inbox → aligning）
+  → 探索上下文 → 问澄清问题（一次一问，循环）
   → 提出 2-3 方案 + 推荐
   → 逐部分展示设计
+  → 确定 Delivery Tier → 用户确认
   → 用户 approve？
       ├─ no → 修改 → 重新展示（循环）
-      └─ yes → 写 spec.md
+      └─ yes → 写 spec.md + 更新 spec_path
   → Spec 自审（修复）
   → 用户 review spec？
       ├─ 要改 → 修改 → 重新审（循环）
-      └─ approved → invoke plan
+      └─ approved → Board: aligning → planned → invoke plan
 ```
 
 **唯一终态：invoke superclaw:plan**

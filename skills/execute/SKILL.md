@@ -20,6 +20,24 @@ description: |
 - 执行方式已确定（subagent / inline）
 - cc-delegate 可用
 
+## Board Integration
+
+> 以下 board 操作仅在 `.superclaw/board/` 存在时执行。没有 board 时 skill 正常运行。
+
+| 时机 | Board 操作 | 命令 |
+|------|-----------|------|
+| 开始执行 | 从 planned 移到 executing | `board-move.sh {task} planned executing "开始执行"` |
+| 执行中 | 更新 updated 时间戳 + 追加 history | 定期更新任务文件 |
+| CC 完成 | 从 executing 移到 reviewing | `board-move.sh {task} executing reviewing "执行完成"` |
+| CC 阻塞 | 从 executing 移到 blocked | `board-move.sh {task} executing blocked "原因: ..."` |
+
+### 崩溃恢复
+
+如果 CC session 意外终止（Stop hook 写入 `last_event.json` 且 `status: "interrupted"`）：
+1. 任务仍在 `executing/` 但 session 已结束
+2. OpenClaw 下次检查时读取 `tool_log.jsonl` 判断进度
+3. 选择：恢复执行 / 移到 blocked / 移回 planned
+
 ## 核心原则
 
 **OpenClaw 不做逐 task 微操。** subagent-driven-development 是 Claude Code 的原生能力：

@@ -24,6 +24,21 @@ Plan 必须经过 review 才能执行。
 - `spec.md` 已存在且状态为 APPROVED
 - 项目代码库可访问
 
+## Board Integration
+
+> 以下 board 操作仅在 `.superclaw/board/` 存在时执行。没有 board 时 skill 正常运行。
+
+| 时机 | Board 操作 | 命令 |
+|------|-----------|------|
+| 开始 | 读 planned 列中的任务 | 读任务文件 + spec_path |
+| CC 出 plan | 更新任务文件 plan_path | `set_frontmatter plan_path <path>` |
+| plan 确认 | 更新 history | 追加 history 行 |
+
+### 如何找到当前任务
+
+1. 如果从 align invoke 过来 → 从调用上下文获取任务文件
+2. 否则 → 在 `board/planned/` 中找到匹配 spec 的任务
+
 ## Checklist
 
 1. **准备上下文** — 收集 spec + 项目结构 + 关键文件

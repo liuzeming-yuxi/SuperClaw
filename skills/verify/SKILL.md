@@ -26,6 +26,26 @@ Claude Code 说"做完了"不算数。OpenClaw 自己验，通过了才算。
 - 有 spec.md（验收标准来源）
 - 有 plan.md（task 列表来源）
 
+## Board Integration
+
+> 以下 board 操作仅在 `.superclaw/board/` 存在时执行。没有 board 时 skill 正常运行。
+
+| 时机 | Board 操作 | 命令 |
+|------|-----------|------|
+| 开始验收 | 读 reviewing 列任务 | 读任务文件 + spec + verify 命令 |
+| 验收不通过 | 移回 executing | `board-move.sh {task} reviewing executing "验收不通过: ..."` |
+| 验收通过 | 保持在 reviewing（等 deliver） | 更新 history |
+
+### SuperClaw 自身 Lint
+
+验收开始前，先运行 SuperClaw 自身的 lint 检查：
+
+```bash
+.superclaw/lint/run-all.sh  # 如果存在
+```
+
+lint 失败不阻塞验收，但会在报告中标记。
+
 ## 三级验收模型
 
 | 级别 | 谁做 | 做什么 | 时机 |
