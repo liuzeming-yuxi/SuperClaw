@@ -1,0 +1,13 @@
+agents:
+  - name: autodream
+    skill: superclaw-autodream
+    type: persistent
+    enabled: true
+  - name: doc-sync
+    skill: superclaw-doc-sync
+    type: event-driven
+    enabled: false
+  - name: ci-watch
+    skill: superclaw-ci-watch
+    type: scheduled
+    enabled: false
