@@ -4,7 +4,7 @@
 
 SuperClaw v2 将当前 5-skill 流水线升级为一个基于文件系统的任务管理平台，增加持久化 agent、分级治理、记忆整理和更强的对齐能力。核心理念不变：人管方向，OpenClaw 管对齐和验收，Claude Code 管执行。
 
-v2 的七个组件：
+v2 的八个组件：
 
 1. **File-Driven Board** — 文件系统看板，取代隐式状态流转
 2. **Phase Integration** — 五阶段 skill 与 board 的精确联动
@@ -13,6 +13,7 @@ v2 的七个组件：
 5. **Persistent Agent Framework** — 通用持久 agent 框架
 6. **Align Skill Upgrade** — 借鉴 gstack office-hours 升级对齐能力
 7. **Constraint Enforcement** — 约束自动化 lint
+8. **Board Web UI** — 基于 Go + Next.js 的看板 Web 界面
 
 ---
 
@@ -870,6 +871,205 @@ S — 约 1 个执行 session。每个 lint 脚本都很短。
 
 ---
 
+## Component 8: Board Web UI
+
+### Overview
+
+一个轻量级 Web 界面，为文件驱动的看板提供可视化操作界面。文件系统始终是 source of truth，Web UI 只是一个窗口。
+
+### Architecture
+
+```
+┌─────────────────────────────────────────┐
+│ Next.js Frontend (Board UI)             │
+│ - Kanban view: columns by phase         │
+│ - Task detail: spec / plan / progress   │
+│ - Real-time updates via WebSocket       │
+└──────────────┬────────────────────────��─┘
+               │ HTTP + WS
+┌──────────────┴──────────────────────────┐
+│ Go Backend (single binary)              │
+│ - REST API: task CRUD                   │
+│ - WebSocket: real-time status push      │
+│ - File watcher: fsnotify on board/      │
+│ - SQLite (single user, no need for PG)  │
+└──────────────┬──────────────────────────┘
+               │ read/write files
+┌──────────────┴──────────────────────────┐
+│ .superclaw/board/ (filesystem = source  │
+│ of truth)                               │
+│ OpenClaw / Claude Code read/write       │
+│ directly                                │
+└───────────────────────────────────────���─┘
+```
+
+### Key Design Decisions
+
+1. **File system is source of truth** — Go backend watches `.superclaw/board/` via fsnotify. When files change (agent moves a task), WebSocket pushes update to frontend. When user drags a card in UI, API call → backend mv's the file.
+
+2. **SQLite for metadata only** — Task content lives in markdown files. SQLite caches parsed metadata for fast queries (list/filter/sort). Rebuilt from files on startup.
+
+3. **Single binary deployment** — Go backend embeds the Next.js static build. One `superclaw-board` binary serves everything.
+
+4. **No auth needed** — Single user on single server. Bind to localhost by default.
+
+5. **Reference: Multica** — Borrow from `github.com/multica-ai/multica`:
+   - Go backend structure: `server/internal/{handler,service,storage,realtime}`
+   - WebSocket pattern: gorilla/websocket for real-time task updates
+   - Frontend kanban layout: Next.js App Router with drag-and-drop columns
+   - Daemon heartbeat pattern: for persistent agent status display
+
+### What NOT to Borrow from Multica
+
+- Multi-user auth (magic link, Google OAuth) — not needed
+- S3/CloudFront file storage — all local
+- pgvector — not needed
+- Multi-workspace — project isolation via directories
+- Resend email — not needed
+
+### Directory Structure
+
+```
+board-ui/
+├── go.mod
+├── go.sum
+├── main.go                    # entry point, embeds frontend
+├── internal/
+│   ├── handler/               # HTTP handlers (REST API)
+│   │   ├── task.go            # GET/PATCH /api/tasks
+│   │   ├── board.go           # GET /api/board (full board state)
+│   │   └── agent.go           # GET /api/agents (agent status)
+│   ├── service/               # business logic
+│   │   ├── task.go            # task CRUD, file parsing
+│   │   ├── board.go           # board state management
+│   │   └── agent.go           # agent status
+│   ├── storage/               # data access
+│   │   ├── file.go            # read/write/move task files
+│   │   ├── sqlite.go          # metadata cache
+│   │   └── parser.go          # markdown frontmatter parsing
+│   ├── realtime/              # WebSocket
+│   │   ├── hub.go             # connection hub
+│   │   └── watcher.go         # fsnotify file watcher → WS events
+│   └── config/                # configuration
+│       └── config.go          # CLI flags, env vars
+├── frontend/                  # Next.js app
+│   ├── package.json
+│   ├── next.config.js
+│   ├── app/
+│   │   ├── layout.tsx
+│   │   ├── page.tsx           # board view (kanban)
+��   │   └── task/
+│   │       └── [id]/
+│   │           └── page.tsx   # task detail view
+│   ├── components/
+│   │   ├── Board.tsx          # kanban board with columns
+│   │   ├── Column.tsx         # single phase column
+│   │   ├── TaskCard.tsx       # draggable task card
+│   │   ├── TaskDetail.tsx     # task detail panel
+│   │   ├── AgentStatus.tsx    # persistent agent status display
+│   │   └── Header.tsx         # top bar with project info
+│   ├── lib/
+│   │   ├── api.ts             # REST API client
+│   │   ├── ws.ts              # WebSocket client
+│   │   └── types.ts           # TypeScript types
+│   └── public/
+└── embed.go                   # //go:embed frontend/out
+```
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/board` | 获取完整看板状态（所有列 + 任务摘要） |
+| `GET` | `/api/tasks` | 列出任务，支持 `?phase=&tier=&priority=` 过滤 |
+| `GET` | `/api/tasks/:id` | 获取单个任务详情（解析 markdown 内容） |
+| `PATCH` | `/api/tasks/:id/move` | 移动任务到新 phase，body: `{"to": "executing"}` |
+| `PATCH` | `/api/tasks/:id` | 更新任务 metadata（priority、tier、assignee） |
+| `POST` | `/api/tasks` | 创建新任务 |
+| `GET` | `/api/agents` | 获取所有持久 agent 状态 |
+| `GET` | `/ws` | WebSocket 连接，接收实时事件 |
+
+### WebSocket Events
+
+```typescript
+// 服务端 → 客户端
+type WSEvent =
+  | { type: "task_moved"; taskId: string; from: string; to: string }
+  | { type: "task_updated"; taskId: string; fields: Partial<Task> }
+  | { type: "task_created"; task: TaskSummary }
+  | { type: "agent_status"; agentName: string; status: string }
+  | { type: "board_reload" }  // 大量变化，客户端应重新拉取
+```
+
+### File Watcher → WebSocket Flow
+
+```
+fsnotify 检测到 .superclaw/board/ 变化
+  → 判断事件类型：
+    ├─ CREATE → 解析新文件 → 更新 SQLite → 推送 task_created
+    ├─ RENAME/MOVE → 判断新旧目录 → 更新 SQLite → 推送 task_moved
+    ├─ WRITE → 重新解析文件 → 更新 SQLite → 推送 task_updated
+    └─ DELETE → 更新 SQLite → 推送 board_reload
+  → 防抖：50ms 窗口内的多个事件合并为一次推送
+```
+
+### Frontend Pages
+
+#### Board View (`/`)
+
+- 看板布局：7 列对应 7 个 phase（inbox → done + blocked）
+- 每个任务显示为卡片：ID、标题、tier badge、priority 颜色、assignee
+- 拖拽卡片在列间移动 → 调用 `PATCH /api/tasks/:id/move`
+- 底部或侧边栏：持久 agent 状态面板
+
+#### Task Detail (`/task/:id`)
+
+- 显示完整 markdown 内容（渲染为 HTML）
+- 左侧：metadata 面板（phase、tier、priority、assignee — 可编辑）
+- 右侧：关联文件链接（spec.md、plan.md）
+- 底部：History 时间线
+
+#### Agent Status
+
+- 每个 enabled agent 显示为一行
+- 状态：idle（灰）/ running（绿动画）/ error（红）
+- 最近一次运行时间 + 结果
+- 点击展开 Run History
+
+### Persistent Agent Status Display
+
+借鉴 Multica 的 daemon heartbeat pattern：
+
+- Go backend 定期（每 5s）读取 `.superclaw/agents/` 下的 agent task files
+- 解析 `status`、`last_run`、`next_eligible` 字段
+- 如果 agent 正在运行（status: running），检查关联进程是否存活
+- 通过 WebSocket 推送 `agent_status` 事件
+
+### Implementation Steps
+
+1. 初始化 Go module + 项目骨架（`board-ui/`）
+2. 实现 markdown frontmatter parser（`storage/parser.go`）
+3. 实现 file storage layer（`storage/file.go`）— 读/写/移动任务文件
+4. 实现 SQLite metadata cache（`storage/sqlite.go`）— 启动时从文件重建
+5. 实现 service layer（`service/task.go`、`service/board.go`）
+6. 实现 REST API handlers（`handler/task.go`、`handler/board.go`）
+7. 实现 fsnotify file watcher（`realtime/watcher.go`）
+8. 实现 WebSocket hub（`realtime/hub.go`）— 连接 file watcher 到 WS
+9. 初始化 Next.js frontend 项目（`frontend/`）
+10. 实现 Board 组件 — kanban 布局 + drag-and-drop
+11. 实现 TaskCard + TaskDetail 组件
+12. 实现 WebSocket 客户端 — 实时更新 board 状态
+13. 实现 AgentStatus 组件
+14. 配置 Go embed — 将 Next.js static export 嵌入 Go binary
+15. 编写测试：API + file watcher + parser
+16. 编写 build script — `make build` 产出单个 `superclaw-board` binary
+
+### Estimated Effort
+
+L (backend) + L (frontend) — 约 6-8 个执行 session。后端和前端可并行开发。
+
+---
+
 ## Migration Path
 
 ### 从 v1 到 v2 的迁移策略
@@ -909,12 +1109,20 @@ S — 约 1 个执行 session。每个 lint 脚本都很短。
 7. **Component 6: Align Skill Upgrade** — 最后升级核心对齐能力
    - 这个放最后，因为需要 board 和 tier 的支持
 
+### Phase 5: Visualization（可并行）
+
+8. **Component 8: Board Web UI** — Go backend + Next.js frontend
+   - 依赖 Component 1（Board 目录结构），但独立于其他组件
+   - 后端和前端可并行开发
+   - 可与 Phase 2-4 同时进行
+
 ### 向后兼容
 
 - Board 是可选的：没有 `.superclaw/board/` 时，skill 正常运行（不做 board 操作）
 - Tier 默认 T2：不指定 tier 时用默认值
 - Agent 默认关闭：不影响现有流程
 - Align upgrade 保留现有流程骨架，新功能以增量方式添加
+- Board Web UI 是纯可选的可视化层，不影响 CLI 和文件驱动的核心流程
 
 ---
 
@@ -929,9 +1137,11 @@ Component 1 (File-Driven Board)          ← 独立，可最先做
          │         │
          │         └── Component 3 (Delivery Tier)  ← 依赖 Phase Integration
          │
-         └── Component 5 (Persistent Agent Framework)  ← 依赖 Board
-                   │
-                   └── Component 4 (AutoDream)  ← 依赖 Framework
+         ├── Component 5 (Persistent Agent Framework)  ← 依赖 Board
+         │         │
+         │         └── Component 4 (AutoDream)  ← 依赖 Framework
+         │
+         └── Component 8 (Board Web UI)  ← 依赖 Board，独立于其他组件
          │
 Component 6 (Align Upgrade)              ← 依赖 Board + Tier + Lint
 ```
@@ -939,6 +1149,7 @@ Component 6 (Align Upgrade)              ← 依赖 Board + Tier + Lint
 **可并行的组合：**
 - Component 1 + Component 7（完全独立）
 - Component 4 + Component 6（在 Component 1/5 完成后可并行）
+- Component 8 与 Phase 2-4 的所有组件可并行（只需 Component 1 完成）
 
 **严格依赖链：**
 - Board → Phase Integration → Tier
