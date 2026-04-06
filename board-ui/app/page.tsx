@@ -211,10 +211,10 @@ function DirectoryPicker({
                 transition: 'background var(--transition-fast)',
               }}
               onMouseEnter={(e) => {
-                if (value !== d.path) e.currentTarget.style.background = 'var(--bg-hover)';
+                if (value !== d.path) { e.currentTarget.style.background = 'rgba(99, 102, 241, 0.08)'; }
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = value === d.path ? 'var(--accent-glow)' : '';
+                e.currentTarget.style.background = value === d.path ? 'var(--accent-glow)' : 'transparent';
               }}
             >
               <span style={{ color: d.has_git ? '#f97316' : 'var(--text-muted)', display: 'flex' }}>
