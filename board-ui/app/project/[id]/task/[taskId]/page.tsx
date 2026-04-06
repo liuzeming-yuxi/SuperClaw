@@ -14,10 +14,6 @@ const PHASE_COLORS: Record<string, string> = {
   executing: '#f59e0b', reviewing: '#22c55e', done: '#10b981', blocked: '#ef4444',
 };
 
-const PRIORITY_LABELS: Record<string, string> = {
-  critical: '紧急', high: '高', medium: '中', low: '低',
-};
-
 const IconBack = () => (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M10 3L5 8l5 5"/>
@@ -104,11 +100,6 @@ export default function TaskDetailPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
           <span style={{ fontFamily: 'monospace', color: 'var(--text-muted)', fontSize: 14 }}>#{task.id}</span>
           {task.tier && <span className={`tier-badge tier-${task.tier}`}>{task.tier}</span>}
-          {task.priority && (
-            <span className={`priority-badge ${task.priority}`}>
-              {PRIORITY_LABELS[task.priority] || task.priority}
-            </span>
-          )}
           <span style={{
             display: 'inline-flex',
             alignItems: 'center',

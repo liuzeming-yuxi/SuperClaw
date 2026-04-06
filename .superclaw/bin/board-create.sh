@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # board-create.sh — Create a new task in the inbox
 #
-# Usage: board-create.sh --title "My task" [--type feature] [--priority medium]
+# Usage: board-create.sh --title "My task" [--type feature]
 #        [--tier T2] [--description "..."] [--assignee human]
 
 set -euo pipefail
@@ -13,7 +13,6 @@ source "$SCRIPT_DIR/_helpers.sh"
 
 TITLE=""
 TYPE="feature"
-PRIORITY=""
 TIER=""
 DESCRIPTION=""
 ASSIGNEE="human"
@@ -22,7 +21,6 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --title)      TITLE="$2"; shift 2 ;;
     --type)       TYPE="$2"; shift 2 ;;
-    --priority)   PRIORITY="$2"; shift 2 ;;
     --tier)       TIER="$2"; shift 2 ;;
     --description) DESCRIPTION="$2"; shift 2 ;;
     --assignee)   ASSIGNEE="$2"; shift 2 ;;
@@ -46,9 +44,6 @@ BOARD_YAML="$SC_ROOT/config/board.yaml"
 INBOX_DIR="$SC_ROOT/board/inbox"
 
 # Read defaults from board.yaml
-if [[ -z "$PRIORITY" ]]; then
-  PRIORITY="$(get_yaml_value "$BOARD_YAML" "default_priority")"
-fi
 if [[ -z "$TIER" ]]; then
   TIER="$(get_yaml_value "$BOARD_YAML" "default_tier")"
 fi
@@ -65,7 +60,7 @@ TS="$(timestamp)"
 
 # Description fallback
 if [[ -z "$DESCRIPTION" ]]; then
-  DESCRIPTION="No description provided."
+  DESCRIPTION="暂无描述。"
 fi
 
 # ─── Create task file ────────────────────────────────────────────────────────
@@ -81,7 +76,6 @@ slug: ${SLUG}
 created: ${TS}
 updated: ${TS}
 assignee: ${ASSIGNEE}
-priority: ${PRIORITY}
 type: ${TYPE}
 tier: ${TIER}
 phase: inbox
@@ -93,25 +87,19 @@ plan_path: ""
 
 # ${TITLE}
 
-## Description
+## 描述
 
 ${DESCRIPTION}
 
-## Acceptance Criteria
+## 验收标准
 
-- [ ] (to be defined during align phase)
+- [ ] （待对齐阶段定义）
 
-## Verify
-
-\`\`\`bash
-# (to be defined during align phase)
-\`\`\`
-
-## History
+## 历史
 
 | Time | Phase | Actor | Note |
 |------|-------|-------|------|
-| ${TS} | inbox | ${ASSIGNEE} | Created |
+| ${TS} | inbox | ${ASSIGNEE} | 创建任务 |
 EOF
 
 # ─── Increment next_id ──────────────────────────────────────────────────────

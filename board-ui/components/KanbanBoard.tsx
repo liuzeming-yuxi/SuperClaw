@@ -33,17 +33,6 @@ const IconX = () => (
   </svg>
 );
 
-const selectStyle: React.CSSProperties = {
-  background: 'var(--bg-primary)',
-  border: '1px solid var(--border)',
-  borderRadius: 'var(--radius-sm)',
-  padding: '7px 10px',
-  color: 'var(--text-secondary)',
-  outline: 'none',
-  fontSize: 12,
-  width: '100%',
-};
-
 const inputStyle: React.CSSProperties = {
   background: 'var(--bg-primary)',
   border: '1px solid var(--border)',
@@ -71,22 +60,10 @@ export default function KanbanBoard({ projectId, tasks, onTaskClick, onRefresh }
   // Form state
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
-  const [newPriority, setNewPriority] = useState('medium');
-  const [newType, setNewType] = useState('feature');
-  const [newTier, setNewTier] = useState('T2');
-  const [newCriteria, setNewCriteria] = useState<string[]>(['']);
-  const [newVerifyCmd, setNewVerifyCmd] = useState('');
-  const [newVerifyExpect, setNewVerifyExpect] = useState('');
 
   const resetForm = () => {
     setNewTitle('');
     setNewDescription('');
-    setNewPriority('medium');
-    setNewType('feature');
-    setNewTier('T2');
-    setNewCriteria(['']);
-    setNewVerifyCmd('');
-    setNewVerifyExpect('');
   };
 
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
@@ -120,16 +97,9 @@ export default function KanbanBoard({ projectId, tasks, onTaskClick, onRefresh }
     if (!newTitle.trim()) return;
     setCreating(true);
     try {
-      const criteria = newCriteria.filter((c) => c.trim() !== '');
       await createTask(projectId, {
         title: newTitle.trim(),
         description: newDescription.trim() || undefined,
-        priority: newPriority,
-        type: newType,
-        tier: newTier,
-        acceptance_criteria: criteria.length > 0 ? criteria : undefined,
-        verify_command: newVerifyCmd.trim() || undefined,
-        verify_expect: newVerifyExpect.trim() || undefined,
       });
       resetForm();
       setShowNewTask(false);
@@ -139,14 +109,6 @@ export default function KanbanBoard({ projectId, tasks, onTaskClick, onRefresh }
     } finally {
       setCreating(false);
     }
-  };
-
-  const addCriterion = () => setNewCriteria([...newCriteria, '']);
-  const removeCriterion = (idx: number) => setNewCriteria(newCriteria.filter((_, i) => i !== idx));
-  const updateCriterion = (idx: number, val: string) => {
-    const copy = [...newCriteria];
-    copy[idx] = val;
-    setNewCriteria(copy);
   };
 
   return (
@@ -231,83 +193,9 @@ export default function KanbanBoard({ projectId, tasks, onTaskClick, onRefresh }
               {/* Description */}
               <div style={{ marginBottom: 14 }}>
                 <label style={labelStyle}>描述</label>
-                <textarea placeholder="描述任务详情..." value={newDescription}
+                <textarea placeholder="简单描述一下你想做什么（可选，OpenClaw 会在对齐阶段详细了解）" value={newDescription}
                   onChange={(e) => setNewDescription(e.target.value)} rows={3}
                   style={{ ...inputStyle, resize: 'vertical' }} />
-              </div>
-
-              {/* Row: Priority / Type / Tier */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
-                <div>
-                  <label style={labelStyle}>优先级</label>
-                  <select value={newPriority} onChange={(e) => setNewPriority(e.target.value)} style={selectStyle}>
-                    <option value="critical">紧急</option>
-                    <option value="high">高</option>
-                    <option value="medium">中</option>
-                    <option value="low">低</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={labelStyle}>类型</label>
-                  <select value={newType} onChange={(e) => setNewType(e.target.value)} style={selectStyle}>
-                    <option value="feature">功能</option>
-                    <option value="bugfix">修复</option>
-                    <option value="refactor">重构</option>
-                    <option value="chore">杂项</option>
-                    <option value="spike">调研</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={labelStyle}>交付层级</label>
-                  <select value={newTier} onChange={(e) => setNewTier(e.target.value)} style={selectStyle}>
-                    <option value="T0">T0 - 生产核心</option>
-                    <option value="T1">T1 - 预览功能</option>
-                    <option value="T2">T2 - 内部工具</option>
-                    <option value="T3">T3 - 脚本/文档</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Acceptance Criteria */}
-              <div style={{ marginBottom: 14 }}>
-                <label style={labelStyle}>验收标准</label>
-                {newCriteria.map((c, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                    <input placeholder={`验收标准 ${i + 1}`} value={c}
-                      onChange={(e) => updateCriterion(i, e.target.value)}
-                      style={{ ...inputStyle, flex: 1 }} />
-                    {newCriteria.length > 1 && (
-                      <button onClick={() => removeCriterion(i)}
-                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', padding: '0 6px', fontSize: 16 }}>
-                        x
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button onClick={addCriterion}
-                  style={{
-                    background: 'none', border: '1px dashed var(--border)',
-                    color: 'var(--text-muted)', padding: '4px 10px',
-                    borderRadius: 'var(--radius-sm)', fontSize: 11, width: '100%',
-                  }}>
-                  + 添加验收标准
-                </button>
-              </div>
-
-              {/* Verify Command */}
-              <div style={{ marginBottom: 14 }}>
-                <label style={labelStyle}>验证命令</label>
-                <input placeholder="例如: npm test -- --grep 'billing'" value={newVerifyCmd}
-                  onChange={(e) => setNewVerifyCmd(e.target.value)}
-                  style={{ ...inputStyle, fontFamily: 'monospace' }} />
-              </div>
-
-              {/* Verify Expected */}
-              <div style={{ marginBottom: 14 }}>
-                <label style={labelStyle}>预期输出</label>
-                <input placeholder="例如: All tests pass, exit code 0" value={newVerifyExpect}
-                  onChange={(e) => setNewVerifyExpect(e.target.value)}
-                  style={{ ...inputStyle, fontFamily: 'monospace' }} />
               </div>
             </div>
 

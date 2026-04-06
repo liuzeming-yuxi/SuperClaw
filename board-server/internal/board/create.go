@@ -11,14 +11,10 @@ import (
 )
 
 type CreateTaskParams struct {
-	Title              string   `json:"title"`
-	Description        string   `json:"description"`
-	Priority           string   `json:"priority"`
-	Type               string   `json:"type"`
-	Tier               string   `json:"tier"`
-	AcceptanceCriteria []string `json:"acceptance_criteria"`
-	VerifyCommand      string   `json:"verify_command"`
-	VerifyExpect       string   `json:"verify_expect"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Type        string `json:"type"`
+	Tier        string `json:"tier"`
 }
 
 func CreateTask(scRoot string, params CreateTaskParams) (*Task, error) {
@@ -29,9 +25,6 @@ func CreateTask(scRoot string, params CreateTaskParams) (*Task, error) {
 
 	if params.Type == "" {
 		params.Type = "feature"
-	}
-	if params.Priority == "" {
-		params.Priority = cfg.DefaultPriority
 	}
 	if params.Tier == "" {
 		params.Tier = cfg.DefaultTier
@@ -52,23 +45,6 @@ func CreateTask(scRoot string, params CreateTaskParams) (*Task, error) {
 
 	// Build acceptance criteria lines
 	acLines := "- [ ] （待对齐阶段定义）"
-	if len(params.AcceptanceCriteria) > 0 {
-		var lines []string
-		for _, ac := range params.AcceptanceCriteria {
-			lines = append(lines, fmt.Sprintf("- [ ] %s", ac))
-		}
-		acLines = strings.Join(lines, "\n")
-	}
-
-	// Build verify section
-	verifyCmd := "# （待对齐阶段定义）"
-	if params.VerifyCommand != "" {
-		verifyCmd = params.VerifyCommand
-	}
-	verifyExpect := ""
-	if params.VerifyExpect != "" {
-		verifyExpect = fmt.Sprintf("\n**预期输出：** %s", params.VerifyExpect)
-	}
 
 	task := &Task{
 		TaskFrontmatter: TaskFrontmatter{
@@ -77,7 +53,6 @@ func CreateTask(scRoot string, params CreateTaskParams) (*Task, error) {
 			Created:       ts,
 			Updated:       ts,
 			Assignee:      "human",
-			Priority:      params.Priority,
 			Type:          params.Type,
 			Tier:          params.Tier,
 			Phase:         "inbox",
@@ -85,8 +60,6 @@ func CreateTask(scRoot string, params CreateTaskParams) (*Task, error) {
 			BlockedReason: "",
 			Sessions:      []TaskSession{},
 			Artifacts:     TaskArtifacts{},
-			VerifyCommand: params.VerifyCommand,
-			VerifyExpect:  params.VerifyExpect,
 		},
 		Title: params.Title,
 		Body: fmt.Sprintf(`## 描述
@@ -97,17 +70,11 @@ func CreateTask(scRoot string, params CreateTaskParams) (*Task, error) {
 
 %s
 
-## Verify
-
-`+"```bash"+`
-%s
-`+"```"+`%s
-
 ## 历史
 
 | Time | Phase | Actor | Note |
 |------|-------|-------|------|
-| %s | inbox | human | 创建任务 |`, params.Description, acLines, verifyCmd, verifyExpect, ts),
+| %s | inbox | human | 创建任务 |`, params.Description, acLines, ts),
 	}
 
 	filename := fmt.Sprintf("%s-%s.md", id, slug)

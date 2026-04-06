@@ -8,13 +8,6 @@ interface TaskCardProps {
   onDragStart: (e: React.DragEvent) => void;
 }
 
-const PRIORITY_LABELS: Record<string, string> = {
-  critical: '紧急',
-  high: '高',
-  medium: '中',
-  low: '低',
-};
-
 const miniIndicator: React.CSSProperties = {
   width: 6,
   height: 6,
@@ -61,11 +54,6 @@ export default function TaskCard({ task, onClick, onDragStart }: TaskCardProps) 
         {task.tier && (
           <span className={`tier-badge tier-${task.tier}`}>{task.tier}</span>
         )}
-        {task.priority && (
-          <span className={`priority-badge ${task.priority}`}>
-            {PRIORITY_LABELS[task.priority] || task.priority}
-          </span>
-        )}
       </div>
 
       {/* Title */}
@@ -97,7 +85,6 @@ export default function TaskCard({ task, onClick, onDragStart }: TaskCardProps) 
               {task.type}
             </span>
           )}
-          {/* Session count badge */}
           {sessionCount > 0 && (
             <span style={{
               fontSize: 9,
@@ -114,7 +101,6 @@ export default function TaskCard({ task, onClick, onDragStart }: TaskCardProps) 
               {sessionCount}
             </span>
           )}
-          {/* Artifact indicators */}
           {artifactCount > 0 && (
             <span style={{
               fontSize: 9,

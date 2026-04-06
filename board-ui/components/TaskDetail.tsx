@@ -29,13 +29,6 @@ const PHASE_COLORS: Record<string, string> = {
   blocked: '#ef4444',
 };
 
-const PRIORITY_LABELS: Record<string, string> = {
-  critical: '紧急',
-  high: '高',
-  medium: '中',
-  low: '低',
-};
-
 const STATUS_LABELS: Record<string, string> = {
   running: '运行中',
   pending: '等待中',
@@ -143,11 +136,6 @@ export default function TaskDetail({ projectId, task, onClose }: TaskDetailProps
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontFamily: 'monospace', color: 'var(--text-muted)', fontSize: 12 }}>#{task.id}</span>
                 {task.tier && <span className={`tier-badge tier-${task.tier}`}>{task.tier}</span>}
-                {task.priority && (
-                  <span className={`priority-badge ${task.priority}`}>
-                    {PRIORITY_LABELS[task.priority] || task.priority}
-                  </span>
-                )}
                 <span style={{
                   display: 'inline-flex', alignItems: 'center', gap: 5,
                   padding: '2px 10px', borderRadius: 10, fontSize: 11, fontWeight: 500,

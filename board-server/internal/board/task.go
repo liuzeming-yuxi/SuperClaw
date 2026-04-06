@@ -38,7 +38,6 @@ type TaskFrontmatter struct {
 	Created       string        `yaml:"created" json:"created"`
 	Updated       string        `yaml:"updated" json:"updated"`
 	Assignee      string        `yaml:"assignee" json:"assignee"`
-	Priority      string        `yaml:"priority" json:"priority"`
 	Type          string        `yaml:"type" json:"type"`
 	Tier          string        `yaml:"tier" json:"tier"`
 	Phase         string        `yaml:"phase" json:"phase"`
@@ -49,8 +48,7 @@ type TaskFrontmatter struct {
 	PlanPath      string        `yaml:"plan_path" json:"plan_path"`
 	Sessions      []TaskSession `yaml:"sessions" json:"sessions"`
 	Artifacts     TaskArtifacts `yaml:"artifacts" json:"artifacts"`
-	VerifyCommand string        `yaml:"verify_command" json:"verify_command"`
-	VerifyExpect  string        `yaml:"verify_expect" json:"verify_expect"`
+	Verify        string        `yaml:"verify" json:"verify"`
 }
 
 type Task struct {
@@ -261,10 +259,6 @@ func UpdateTaskMetadata(projectPath, taskID string, updates map[string]interface
 			if v, ok := val.(string); ok {
 				task.Title = v
 			}
-		case "priority":
-			if v, ok := val.(string); ok {
-				task.Priority = v
-			}
 		case "type":
 			if v, ok := val.(string); ok {
 				task.Type = v
@@ -285,13 +279,9 @@ func UpdateTaskMetadata(projectPath, taskID string, updates map[string]interface
 			if v, ok := val.(string); ok {
 				task.Body = rebuildBody(v, task.Body)
 			}
-		case "verify_command":
+		case "verify":
 			if v, ok := val.(string); ok {
-				task.VerifyCommand = v
-			}
-		case "verify_expect":
-			if v, ok := val.(string); ok {
-				task.VerifyExpect = v
+				task.Verify = v
 			}
 		}
 	}

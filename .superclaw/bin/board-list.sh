@@ -60,13 +60,12 @@ list_phase() {
   for file in "${files[@]}"; do
     local filename
     filename="$(basename "$file")"
-    local tier priority type title
+    local tier type title
     tier="$(get_frontmatter "$file" "tier")"
-    priority="$(get_frontmatter "$file" "priority")"
     type="$(get_frontmatter "$file" "type")"
     title="$(get_title "$file")"
 
-    printf '  %-25s  %-4s  %-8s  %-8s  %s\n' "$filename" "$tier" "$priority" "$type" "$title"
+    printf '  %-25s  %-4s  %-8s  %s\n' "$filename" "$tier" "$type" "$title"
     ((count++)) || true
   done
 }

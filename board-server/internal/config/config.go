@@ -21,7 +21,6 @@ type ProjectsConfig struct {
 type BoardConfig struct {
 	NextID          int    `yaml:"next_id"`
 	DefaultTier     string `yaml:"default_tier"`
-	DefaultPriority string `yaml:"default_priority"`
 }
 
 type AgentEntry struct {

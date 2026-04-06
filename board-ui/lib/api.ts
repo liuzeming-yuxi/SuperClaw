@@ -33,7 +33,6 @@ export interface Task {
   created: string;
   updated: string;
   assignee: string;
-  priority: string;
   type: string;
   tier: string;
   phase: string;
@@ -44,8 +43,7 @@ export interface Task {
   plan_path: string;
   sessions: TaskSession[];
   artifacts: TaskArtifacts;
-  verify_command: string;
-  verify_expect: string;
+  verify: string;
   title: string;
   body: string;
 }
@@ -118,12 +116,6 @@ export async function moveTask(projectId: string, taskId: string, phase: string)
 export async function createTask(projectId: string, data: {
   title: string;
   description?: string;
-  type?: string;
-  priority?: string;
-  tier?: string;
-  acceptance_criteria?: string[];
-  verify_command?: string;
-  verify_expect?: string;
 }): Promise<Task> {
   const res = await fetch(`${API_BASE}/api/projects/${projectId}/tasks`, {
     method: 'POST',
