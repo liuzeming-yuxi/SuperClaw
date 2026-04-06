@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Session, Agent } from '@/lib/api';
+import { TaskSession, Agent } from '@/lib/api';
 
 interface SidebarProps {
-  sessions: Session[];
+  sessions: TaskSession[];
   agents: Agent[];
   selectedSession: string | null;
   onSelectSession: (id: string | null) => void;
@@ -38,11 +38,15 @@ const IconChevronRight = () => (
 );
 
 const STATUS_COLORS: Record<string, string> = {
+  running: '#f59e0b',
+  pending: '#6b7280',
   aligning: '#8b5cf6',
   executing: '#f59e0b',
   reviewing: '#22c55e',
   idle: '#6b7280',
   done: '#10b981',
+  completed: '#10b981',
+  failed: '#ef4444',
 };
 
 export default function Sidebar({ sessions, agents, selectedSession, onSelectSession, projectName, onBack }: SidebarProps) {
@@ -183,12 +187,25 @@ export default function Sidebar({ sessions, agents, selectedSession, onSelectSes
                     color: 'var(--text-muted)',
                     marginLeft: 15,
                     marginTop: 2,
+                    display: 'flex',
+                    justifyContent: 'space-between',
                   }}>
-                    {s.status === 'aligning' ? '对齐中' :
-                     s.status === 'executing' ? '执行中' :
-                     s.status === 'reviewing' ? '验收中' :
-                     s.status === 'idle' ? '空闲' :
-                     s.status === 'done' ? '已完成' : s.status}
+                    <span>
+                      {s.status === 'running' ? '运行中' :
+                       s.status === 'pending' ? '等待中' :
+                       s.status === 'aligning' ? '对齐中' :
+                       s.status === 'executing' ? '执行中' :
+                       s.status === 'reviewing' ? '验收中' :
+                       s.status === 'completed' ? '已完成' :
+                       s.status === 'failed' ? '失败' :
+                       s.status === 'idle' ? '空闲' :
+                       s.status === 'done' ? '已完成' : s.status}
+                    </span>
+                    {s.task_id && (
+                      <span style={{ fontFamily: 'monospace', fontSize: 10 }}>
+                        任务 #{s.task_id}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))

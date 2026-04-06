@@ -9,6 +9,24 @@ export interface Project {
   phase_counts: Record<string, number>;
 }
 
+export interface TaskArtifacts {
+  spec: string;
+  plan: string;
+  progress: string;
+  verify_report: string;
+  deliver_summary: string;
+}
+
+export interface TaskSession {
+  id: string;
+  agent: string;
+  phase: string;
+  status: string;
+  started: string;
+  updated: string;
+  task_id: string;
+}
+
 export interface Task {
   id: string;
   slug: string;
@@ -19,21 +37,21 @@ export interface Task {
   type: string;
   tier: string;
   phase: string;
+  previous_phase: string;
   blocked_reason: string;
   parent: string;
   spec_path: string;
   plan_path: string;
+  sessions: TaskSession[];
+  artifacts: TaskArtifacts;
+  verify_command: string;
+  verify_expect: string;
   title: string;
   body: string;
 }
 
-export interface Session {
-  id: string;
-  agent: string;
-  status: string;
-  taskId: string;
-  icon: string;
-}
+// Keep backward compat alias
+export type Session = TaskSession;
 
 export interface Agent {
   name: string;
@@ -52,6 +70,12 @@ export interface BrowseResult {
   current: string;
   parent: string;
   directories: DirEntry[];
+}
+
+export interface ArtifactResponse {
+  content: string;
+  path: string;
+  exists: boolean;
 }
 
 export async function fetchProjects(): Promise<Project[]> {
@@ -93,10 +117,13 @@ export async function moveTask(projectId: string, taskId: string, phase: string)
 
 export async function createTask(projectId: string, data: {
   title: string;
+  description?: string;
   type?: string;
   priority?: string;
   tier?: string;
-  description?: string;
+  acceptance_criteria?: string[];
+  verify_command?: string;
+  verify_expect?: string;
 }): Promise<Task> {
   const res = await fetch(`${API_BASE}/api/projects/${projectId}/tasks`, {
     method: 'POST',
@@ -107,9 +134,54 @@ export async function createTask(projectId: string, data: {
   return res.json();
 }
 
-export async function fetchSessions(projectId: string): Promise<Session[]> {
+export async function updateTask(projectId: string, taskId: string, updates: Record<string, unknown>): Promise<Task> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/tasks/${taskId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error('Failed to update task');
+  return res.json();
+}
+
+export async function addSession(projectId: string, taskId: string, agent: string, phase?: string): Promise<TaskSession> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/tasks/${taskId}/sessions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agent, phase: phase || 'executing' }),
+  });
+  if (!res.ok) throw new Error('Failed to add session');
+  return res.json();
+}
+
+export async function updateSession(projectId: string, taskId: string, sessionId: string, status: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/tasks/${taskId}/sessions/${sessionId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) throw new Error('Failed to update session');
+}
+
+export async function fetchSessions(projectId: string): Promise<TaskSession[]> {
   const res = await fetch(`${API_BASE}/api/projects/${projectId}/sessions`);
   if (!res.ok) throw new Error('Failed to fetch sessions');
+  return res.json();
+}
+
+export async function fetchArtifact(projectId: string, taskId: string, type: string): Promise<ArtifactResponse> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/tasks/${taskId}/artifacts/${type}`);
+  if (!res.ok) throw new Error('Failed to fetch artifact');
+  return res.json();
+}
+
+export async function putArtifact(projectId: string, taskId: string, type: string, content: string): Promise<{ path: string }> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/tasks/${taskId}/artifacts/${type}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok) throw new Error('Failed to save artifact');
   return res.json();
 }
 

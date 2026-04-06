@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { fetchTasks, fetchSessions, fetchAgents, fetchProjects, Task, Session, Agent, Project } from '@/lib/api';
+import { fetchTasks, fetchSessions, fetchAgents, fetchProjects, Task, TaskSession, Agent, Project } from '@/lib/api';
 import { subscribe } from '@/lib/ws';
 import Sidebar from '@/components/Sidebar';
 import KanbanBoard from '@/components/KanbanBoard';
@@ -16,7 +16,7 @@ export default function ProjectBoardPage() {
 
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessions, setSessions] = useState<TaskSession[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -92,8 +92,8 @@ export default function ProjectBoardPage() {
 
       {selectedTask && (
         <TaskDetail
+          projectId={projectId}
           task={selectedTask}
-          sessions={sessions}
           onClose={() => setSelectedTask(null)}
         />
       )}

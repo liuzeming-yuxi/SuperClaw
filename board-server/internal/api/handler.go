@@ -53,7 +53,7 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 
 	type ProjectWithStats struct {
 		config.Project
-		TaskCount int            `json:"task_count"`
+		TaskCount   int            `json:"task_count"`
 		PhaseCounts map[string]int `json:"phase_counts"`
 	}
 
@@ -149,6 +149,71 @@ func (h *Handler) GetTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, task)
 }
 
+// POST /api/projects/{projectId}/tasks
+func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	proj, err := h.findProject(projectID)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	if proj == nil {
+		writeError(w, 404, "project not found")
+		return
+	}
+
+	var params board.CreateTaskParams
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		writeError(w, 400, "invalid json")
+		return
+	}
+	if params.Title == "" {
+		writeError(w, 400, "title is required")
+		return
+	}
+
+	scRoot := proj.Path + "/.superclaw"
+	task, err := board.CreateTask(scRoot, params)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+
+	h.Hub.Broadcast(ws.Message{Type: "task_created", Data: task})
+	writeJSON(w, 201, task)
+}
+
+// PATCH /api/projects/{projectId}/tasks/{taskId}
+func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	taskID := chi.URLParam(r, "taskId")
+
+	proj, err := h.findProject(projectID)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	if proj == nil {
+		writeError(w, 404, "project not found")
+		return
+	}
+
+	var updates map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+		writeError(w, 400, "invalid json")
+		return
+	}
+
+	task, err := board.UpdateTaskMetadata(proj.Path, taskID, updates)
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+
+	h.Hub.Broadcast(ws.Message{Type: "task_updated", Data: task})
+	writeJSON(w, 200, task)
+}
+
 // PATCH /api/projects/{projectId}/tasks/{taskId}/move
 func (h *Handler) MoveTask(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
@@ -166,28 +231,42 @@ func (h *Handler) MoveTask(w http.ResponseWriter, r *http.Request) {
 
 	var body struct {
 		Phase string `json:"phase"`
+		To    string `json:"to"`
+		Note  string `json:"note"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, 400, "invalid json")
 		return
 	}
 
-	if err := board.MoveTask(proj.Path, taskID, body.Phase); err != nil {
+	// Support both "phase" and "to" field names
+	targetPhase := body.Phase
+	if targetPhase == "" {
+		targetPhase = body.To
+	}
+	if targetPhase == "" {
+		writeError(w, 400, "phase or to is required")
+		return
+	}
+
+	if err := board.MoveTask(proj.Path, taskID, targetPhase, body.Note); err != nil {
 		writeError(w, 400, err.Error())
 		return
 	}
 
 	h.Hub.Broadcast(ws.Message{Type: "task_moved", Data: map[string]string{
 		"task_id": taskID,
-		"phase":   body.Phase,
+		"phase":   targetPhase,
 	}})
 
 	writeJSON(w, 200, map[string]string{"status": "ok"})
 }
 
-// POST /api/projects/{projectId}/tasks
-func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
+// POST /api/projects/{projectId}/tasks/{taskId}/sessions
+func (h *Handler) AddSession(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
+	taskID := chi.URLParam(r, "taskId")
+
 	proj, err := h.findProject(projectID)
 	if err != nil {
 		writeError(w, 500, err.Error())
@@ -199,52 +278,166 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Title       string `json:"title"`
-		Type        string `json:"type"`
-		Priority    string `json:"priority"`
-		Tier        string `json:"tier"`
-		Description string `json:"description"`
+		Agent string `json:"agent"`
+		Phase string `json:"phase"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, 400, "invalid json")
 		return
 	}
-	if body.Title == "" {
-		writeError(w, 400, "title is required")
+	if body.Agent == "" {
+		writeError(w, 400, "agent is required")
+		return
+	}
+	if body.Phase == "" {
+		body.Phase = "executing"
+	}
+
+	session, err := board.AddSession(proj.Path, taskID, body.Agent, body.Phase)
+	if err != nil {
+		writeError(w, 400, err.Error())
 		return
 	}
 
-	scRoot := proj.Path + "/.superclaw"
-	task, err := board.CreateTask(scRoot, body.Title, body.Type, body.Priority, body.Tier, body.Description)
+	h.Hub.Broadcast(ws.Message{Type: "session_created", Data: session})
+	writeJSON(w, 201, session)
+}
+
+// PATCH /api/projects/{projectId}/tasks/{taskId}/sessions/{sessionId}
+func (h *Handler) UpdateSession(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	taskID := chi.URLParam(r, "taskId")
+	sessionID := chi.URLParam(r, "sessionId")
+
+	proj, err := h.findProject(projectID)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	if proj == nil {
+		writeError(w, 404, "project not found")
+		return
+	}
+
+	var body struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, 400, "invalid json")
+		return
+	}
+	if body.Status == "" {
+		writeError(w, 400, "status is required")
+		return
+	}
+
+	if err := board.UpdateSession(proj.Path, taskID, sessionID, body.Status); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+
+	h.Hub.Broadcast(ws.Message{Type: "session_updated", Data: map[string]string{
+		"task_id":    taskID,
+		"session_id": sessionID,
+		"status":     body.Status,
+	}})
+
+	writeJSON(w, 200, map[string]string{"status": "ok"})
+}
+
+// GET /api/projects/{projectId}/sessions
+func (h *Handler) ListSessions(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	proj, err := h.findProject(projectID)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	if proj == nil {
+		writeError(w, 404, "project not found")
+		return
+	}
+
+	sessions, err := board.ListActiveSessions(proj.Path)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	if sessions == nil {
+		sessions = []board.TaskSession{}
+	}
+	writeJSON(w, 200, sessions)
+}
+
+// GET /api/projects/{projectId}/tasks/{taskId}/artifacts/{type}
+func (h *Handler) GetArtifact(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	taskID := chi.URLParam(r, "taskId")
+	artType := chi.URLParam(r, "artifactType")
+
+	proj, err := h.findProject(projectID)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	if proj == nil {
+		writeError(w, 404, "project not found")
+		return
+	}
+
+	content, path, exists, err := board.GetArtifact(proj.Path, taskID, artType)
 	if err != nil {
 		writeError(w, 500, err.Error())
 		return
 	}
 
-	h.Hub.Broadcast(ws.Message{Type: "task_created", Data: task})
-	writeJSON(w, 201, task)
+	writeJSON(w, 200, map[string]interface{}{
+		"content": content,
+		"path":    path,
+		"exists":  exists,
+	})
 }
 
-// GET /api/projects/{projectId}/sessions
-func (h *Handler) ListSessions(w http.ResponseWriter, r *http.Request) {
-	// Placeholder: sessions will come from agent integration
-	sessions := []map[string]interface{}{
-		{
-			"id":     "001",
-			"agent":  "OpenClaw",
-			"status": "aligning",
-			"taskId": "003",
-			"icon":   "🟢",
-		},
-		{
-			"id":     "002",
-			"agent":  "Claude Code",
-			"status": "executing",
-			"taskId": "002",
-			"icon":   "🔵",
-		},
+// PUT /api/projects/{projectId}/tasks/{taskId}/artifacts/{type}
+func (h *Handler) PutArtifact(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	taskID := chi.URLParam(r, "taskId")
+	artType := chi.URLParam(r, "artifactType")
+
+	proj, err := h.findProject(projectID)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
 	}
-	writeJSON(w, 200, sessions)
+	if proj == nil {
+		writeError(w, 404, "project not found")
+		return
+	}
+
+	var body struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, 400, "invalid json")
+		return
+	}
+
+	path, err := board.PutArtifact(proj.Path, taskID, artType, body.Content)
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+
+	h.Hub.Broadcast(ws.Message{Type: "artifact_updated", Data: map[string]string{
+		"task_id": taskID,
+		"type":    artType,
+		"path":    path,
+	}})
+
+	writeJSON(w, 200, map[string]interface{}{
+		"path":   path,
+		"status": "ok",
+	})
 }
 
 // GET /api/projects/{projectId}/agents
@@ -264,16 +457,13 @@ func (h *Handler) BrowseFilesystem(w http.ResponseWriter, r *http.Request) {
 		requestedPath = "/root"
 	}
 
-	// Clean and resolve the path
 	cleanPath := filepath.Clean(requestedPath)
 
-	// Security: prevent traversal above /
 	if !strings.HasPrefix(cleanPath, "/") {
 		writeError(w, 400, "path must be absolute")
 		return
 	}
 
-	// Verify the path exists and is a directory
 	info, err := os.Stat(cleanPath)
 	if err != nil {
 		writeError(w, 404, "path not found")
@@ -284,7 +474,6 @@ func (h *Handler) BrowseFilesystem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Evaluate symlinks to prevent escaping
 	realPath, err := filepath.EvalSymlinks(cleanPath)
 	if err != nil {
 		writeError(w, 400, "cannot resolve path")
@@ -309,12 +498,10 @@ func (h *Handler) BrowseFilesystem(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		name := entry.Name()
-		// Skip hidden dirs except common ones
 		if strings.HasPrefix(name, ".") {
 			continue
 		}
 		fullPath := filepath.Join(realPath, name)
-		// Check if this directory contains .git
 		_, gitErr := os.Stat(filepath.Join(fullPath, ".git"))
 		dirs = append(dirs, DirEntry{
 			Name:   name,
@@ -324,7 +511,6 @@ func (h *Handler) BrowseFilesystem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sort.Slice(dirs, func(i, j int) bool {
-		// Git repos first, then alphabetical
 		if dirs[i].HasGit != dirs[j].HasGit {
 			return dirs[i].HasGit
 		}

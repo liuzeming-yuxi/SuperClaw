@@ -15,7 +15,18 @@ const PRIORITY_LABELS: Record<string, string> = {
   low: '低',
 };
 
+const miniIndicator: React.CSSProperties = {
+  width: 6,
+  height: 6,
+  borderRadius: '50%',
+  flexShrink: 0,
+};
+
 export default function TaskCard({ task, onClick, onDragStart }: TaskCardProps) {
+  const sessionCount = task.sessions?.length || 0;
+  const arts = task.artifacts || {};
+  const artifactCount = [arts.spec, arts.plan, arts.progress, arts.verify_report, arts.deliver_summary].filter(Boolean).length;
+
   return (
     <div
       draggable
@@ -71,20 +82,56 @@ export default function TaskCard({ task, onClick, onDragStart }: TaskCardProps) 
         {task.title || task.slug || `Task ${task.id}`}
       </div>
 
-      {/* Bottom: type + assignee */}
+      {/* Bottom: type + indicators + assignee */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        {task.type && (
-          <span style={{
-            fontSize: 10,
-            color: 'var(--text-muted)',
-            background: 'var(--bg-tertiary)',
-            padding: '2px 7px',
-            borderRadius: 4,
-            fontWeight: 500,
-          }}>
-            {task.type}
-          </span>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {task.type && (
+            <span style={{
+              fontSize: 10,
+              color: 'var(--text-muted)',
+              background: 'var(--bg-tertiary)',
+              padding: '2px 7px',
+              borderRadius: 4,
+              fontWeight: 500,
+            }}>
+              {task.type}
+            </span>
+          )}
+          {/* Session count badge */}
+          {sessionCount > 0 && (
+            <span style={{
+              fontSize: 9,
+              color: '#f59e0b',
+              background: 'rgba(245,158,11,0.12)',
+              padding: '1px 5px',
+              borderRadius: 4,
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 3,
+            }}>
+              <div style={{ ...miniIndicator, background: '#f59e0b' }} />
+              {sessionCount}
+            </span>
+          )}
+          {/* Artifact indicators */}
+          {artifactCount > 0 && (
+            <span style={{
+              fontSize: 9,
+              color: '#3b82f6',
+              background: 'rgba(59,130,246,0.12)',
+              padding: '1px 5px',
+              borderRadius: 4,
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 3,
+            }}>
+              <div style={{ ...miniIndicator, background: '#3b82f6' }} />
+              {artifactCount}
+            </span>
+          )}
+        </div>
         {task.assignee && (
           <div style={{
             display: 'flex',

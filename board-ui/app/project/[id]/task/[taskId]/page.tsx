@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { fetchTask, fetchSessions, Task, Session } from '@/lib/api';
+import { fetchTask, fetchSessions, Task, TaskSession } from '@/lib/api';
 
 const PHASE_LABELS: Record<string, string> = {
   inbox: '待处理', aligning: '对齐中', planned: '已规划',
@@ -38,7 +38,7 @@ export default function TaskDetailPage() {
   const taskId = params.taskId as string;
 
   const [task, setTask] = useState<Task | null>(null);
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessions, setSessions] = useState<TaskSession[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -73,7 +73,7 @@ export default function TaskDetailPage() {
     );
   }
 
-  const taskSessions = sessions.filter((s) => s.taskId === task.id);
+  const taskSessions = sessions.filter((s) => s.task_id === task.id);
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', padding: '32px 24px' }}>
