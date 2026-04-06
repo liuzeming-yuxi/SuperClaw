@@ -1,51 +1,108 @@
-import { BoardState, Task, AgentInfo } from './types';
+const API_BASE = 'http://192.168.16.30:9876';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9876';
+export interface Project {
+  id: string;
+  name: string;
+  path: string;
+  description: string;
+  task_count: number;
+  phase_counts: Record<string, number>;
+}
 
-async function fetchJSON<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`);
-  if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
+export interface Task {
+  id: string;
+  slug: string;
+  created: string;
+  updated: string;
+  assignee: string;
+  priority: string;
+  type: string;
+  tier: string;
+  phase: string;
+  blocked_reason: string;
+  parent: string;
+  spec_path: string;
+  plan_path: string;
+  title: string;
+  body: string;
+}
+
+export interface Session {
+  id: string;
+  agent: string;
+  status: string;
+  taskId: string;
+  icon: string;
+}
+
+export interface Agent {
+  name: string;
+  skill: string;
+  type: string;
+  enabled: boolean;
+}
+
+export async function fetchProjects(): Promise<Project[]> {
+  const res = await fetch(`${API_BASE}/api/projects`);
+  if (!res.ok) throw new Error('Failed to fetch projects');
   return res.json();
 }
 
-async function patchJSON<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+export async function createProject(project: Omit<Project, 'task_count' | 'phase_counts'>): Promise<Project> {
+  const res = await fetch(`${API_BASE}/api/projects`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(project),
+  });
+  if (!res.ok) throw new Error('Failed to create project');
+  return res.json();
+}
+
+export async function fetchTasks(projectId: string): Promise<Task[]> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/tasks`);
+  if (!res.ok) throw new Error('Failed to fetch tasks');
+  return res.json();
+}
+
+export async function fetchTask(projectId: string, taskId: string): Promise<Task> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/tasks/${taskId}`);
+  if (!res.ok) throw new Error('Failed to fetch task');
+  return res.json();
+}
+
+export async function moveTask(projectId: string, taskId: string, phase: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/tasks/${taskId}/move`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ phase }),
   });
-  if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
+  if (!res.ok) throw new Error('Failed to move task');
+}
+
+export async function createTask(projectId: string, data: {
+  title: string;
+  type?: string;
+  priority?: string;
+  tier?: string;
+  description?: string;
+}): Promise<Task> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/tasks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create task');
   return res.json();
 }
 
-export async function fetchBoard(): Promise<BoardState> {
-  return fetchJSON('/api/board');
+export async function fetchSessions(projectId: string): Promise<Session[]> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/sessions`);
+  if (!res.ok) throw new Error('Failed to fetch sessions');
+  return res.json();
 }
 
-export async function fetchTasks(filters?: {
-  phase?: string;
-  tier?: string;
-  priority?: string;
-}): Promise<Task[]> {
-  const params = new URLSearchParams();
-  if (filters?.phase) params.set('phase', filters.phase);
-  if (filters?.tier) params.set('tier', filters.tier);
-  if (filters?.priority) params.set('priority', filters.priority);
-  const qs = params.toString();
-  return fetchJSON(`/api/tasks${qs ? '?' + qs : ''}`);
-}
-
-export async function fetchTask(id: string): Promise<Task> {
-  return fetchJSON(`/api/tasks/${id}`);
-}
-
-export async function moveTask(
-  id: string,
-  toPhase: string
-): Promise<{ status: string; from?: string; to?: string }> {
-  return patchJSON(`/api/tasks/${id}/move`, { to: toPhase });
-}
-
-export async function fetchAgents(): Promise<AgentInfo[]> {
-  return fetchJSON('/api/agents');
+export async function fetchAgents(projectId: string): Promise<Agent[]> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/agents`);
+  if (!res.ok) throw new Error('Failed to fetch agents');
+  return res.json();
 }

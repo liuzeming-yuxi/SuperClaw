@@ -1,82 +1,103 @@
 package main
 
 import (
-	"flag"
-	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/superclaw/board-server/internal/handler"
-	"github.com/superclaw/board-server/internal/store"
-	"github.com/superclaw/board-server/internal/watcher"
+
+	"github.com/superclaw/board-server/internal/api"
+	"github.com/superclaw/board-server/internal/ws"
 )
 
 func main() {
-	boardDir := flag.String("board-dir", ".superclaw/board", "Path to the board directory")
-	port := flag.Int("port", 9876, "Port to bind to")
-	flag.Parse()
-
-	// Initialize store
-	s, err := store.New()
-	if err != nil {
-		log.Fatalf("init store: %v", err)
-	}
-	defer s.Close()
-
-	// Rebuild cache from files
-	if err := s.RebuildFromDir(*boardDir); err != nil {
-		log.Printf("warning: rebuild from dir: %v", err)
+	// Determine .superclaw root
+	scRoot := os.Getenv("SUPERCLAW_ROOT")
+	if scRoot == "" {
+		// Default: look relative to working directory
+		cwd, _ := os.Getwd()
+		scRoot = filepath.Join(cwd, ".superclaw")
 	}
 
-	// Initialize file watcher
-	w, err := watcher.New(*boardDir)
-	if err != nil {
-		log.Printf("warning: file watcher disabled: %v", err)
-	} else {
-		defer w.Close()
-	}
+	log.Printf("SuperClaw board server starting, root: %s", scRoot)
 
-	// Initialize WebSocket hub
-	hub := handler.NewHub()
-	if w != nil {
-		go hub.RunEventLoop(w)
-		// Rebuild store on file changes
-		go func() {
-			for range w.Events {
-				s.RebuildFromDir(*boardDir)
-			}
-		}()
-	}
+	hub := ws.NewHub()
+	handler := &api.Handler{SCRoot: scRoot, Hub: hub}
 
-	// Handlers
-	boardH := &handler.BoardHandler{Store: s, BoardDir: *boardDir}
-	taskH := &handler.TaskHandler{Store: s, BoardDir: *boardDir}
-
-	// Router
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:*", "http://127.0.0.1:*"},
-		AllowedMethods:   []string{"GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"},
+		AllowedOrigins:   []string{"http://192.168.16.30:*", "http://localhost:*", "http://127.0.0.1:*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Content-Type"},
 		AllowCredentials: true,
 	}))
 
-	r.Get("/api/board", boardH.GetBoard)
-	r.Get("/api/tasks", taskH.GetTasks)
-	r.Get("/api/tasks/{id}", taskH.GetTask)
-	r.Patch("/api/tasks/{id}/move", taskH.MoveTask)
-	r.Get("/api/agents", boardH.GetAgents)
+	// API routes
+	r.Get("/api/projects", handler.ListProjects)
+	r.Post("/api/projects", handler.CreateProject)
+	r.Get("/api/projects/{projectId}/tasks", handler.ListTasks)
+	r.Post("/api/projects/{projectId}/tasks", handler.CreateTask)
+	r.Get("/api/projects/{projectId}/tasks/{taskId}", handler.GetTask)
+	r.Patch("/api/projects/{projectId}/tasks/{taskId}/move", handler.MoveTask)
+	r.Get("/api/projects/{projectId}/sessions", handler.ListSessions)
+	r.Get("/api/projects/{projectId}/agents", handler.ListAgents)
+
+	// WebSocket
 	r.Get("/ws", hub.HandleWS)
 
-	addr := fmt.Sprintf("localhost:%d", *port)
-	log.Printf("SuperClaw Board Server listening on %s", addr)
-	log.Printf("Board directory: %s", *boardDir)
+	// Start file watcher in background
+	go startWatcher(scRoot, hub)
+
+	addr := "0.0.0.0:9876"
+	log.Printf("Listening on %s", addr)
 	if err := http.ListenAndServe(addr, r); err != nil {
-		log.Fatalf("server: %v", err)
+		log.Fatal(err)
+	}
+}
+
+func startWatcher(scRoot string, hub *ws.Hub) {
+	boardDir := filepath.Join(scRoot, "board")
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Printf("fsnotify error: %v", err)
+		return
+	}
+
+	// Watch all phase directories
+	phases := []string{"inbox", "aligning", "planned", "executing", "reviewing", "blocked", "done"}
+	for _, phase := range phases {
+		dir := filepath.Join(boardDir, phase)
+		os.MkdirAll(dir, 0755)
+		if err := watcher.Add(dir); err != nil {
+			log.Printf("watch error for %s: %v", dir, err)
+		}
+	}
+
+	log.Printf("Watching board directory: %s", boardDir)
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename) {
+				hub.Broadcast(ws.Message{
+					Type: "board_changed",
+					Data: map[string]string{"file": event.Name, "op": event.Op.String()},
+				})
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			log.Printf("watcher error: %v", err)
+		}
 	}
 }

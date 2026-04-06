@@ -1,57 +1,53 @@
-'use client';
+const WS_URL = 'ws://192.168.16.30:9876/ws';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { WSEvent } from './types';
+type MessageHandler = (msg: { type: string; data: unknown }) => void;
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:9876/ws';
+let socket: WebSocket | null = null;
+let handlers: MessageHandler[] = [];
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-export function useWebSocket() {
-  const [lastEvent, setLastEvent] = useState<WSEvent | null>(null);
-  const [connected, setConnected] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
-  const retriesRef = useRef(0);
+function connect() {
+  if (typeof window === 'undefined') return;
 
-  const connect = useCallback(() => {
+  socket = new WebSocket(WS_URL);
+
+  socket.onopen = () => {
+    console.log('[ws] connected');
+  };
+
+  socket.onmessage = (event) => {
     try {
-      const ws = new WebSocket(WS_URL);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        setConnected(true);
-        retriesRef.current = 0;
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data) as WSEvent;
-          setLastEvent(data);
-        } catch {
-          // ignore malformed messages
-        }
-      };
-
-      ws.onclose = () => {
-        setConnected(false);
-        // Exponential backoff reconnect
-        const delay = Math.min(1000 * Math.pow(2, retriesRef.current), 30000);
-        retriesRef.current++;
-        setTimeout(connect, delay);
-      };
-
-      ws.onerror = () => {
-        ws.close();
-      };
+      const msg = JSON.parse(event.data);
+      handlers.forEach((h) => h(msg));
     } catch {
-      // WebSocket constructor can throw in SSR
+      // ignore parse errors
     }
-  }, []);
+  };
 
-  useEffect(() => {
+  socket.onclose = () => {
+    console.log('[ws] disconnected, reconnecting...');
+    scheduleReconnect();
+  };
+
+  socket.onerror = () => {
+    socket?.close();
+  };
+}
+
+function scheduleReconnect() {
+  if (reconnectTimer) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
     connect();
-    return () => {
-      wsRef.current?.close();
-    };
-  }, [connect]);
+  }, 3000);
+}
 
-  return { lastEvent, connected };
+export function subscribe(handler: MessageHandler): () => void {
+  handlers.push(handler);
+  if (!socket || socket.readyState === WebSocket.CLOSED) {
+    connect();
+  }
+  return () => {
+    handlers = handlers.filter((h) => h !== handler);
+  };
 }

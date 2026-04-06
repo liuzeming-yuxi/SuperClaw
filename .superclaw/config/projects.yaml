@@ -1,0 +1,5 @@
+projects:
+  - id: "superclaw"
+    name: "SuperClaw"
+    path: "/root/.openclaw/workspace/repos/superclaw"
+    description: "SuperClaw - AI-powered project management system"
