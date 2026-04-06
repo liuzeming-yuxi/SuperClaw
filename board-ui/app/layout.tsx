@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'SuperClaw Board',
+  title: 'SuperClaw 看板',
   description: 'AI-powered project management board',
 };
 

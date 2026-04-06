@@ -79,15 +79,15 @@ export default function TaskDetail({ task, sessions, onClose }: TaskDetailProps)
           borderRadius: 8,
         }}>
           <div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Type</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>类型</div>
             <div style={{ fontSize: 13 }}>{task.type}</div>
           </div>
           <div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Assignee</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>负责人</div>
             <div style={{ fontSize: 13 }}>{task.assignee}</div>
           </div>
           <div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Created</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>创建时间</div>
             <div style={{ fontSize: 13 }}>{new Date(task.created).toLocaleDateString()}</div>
           </div>
         </div>
@@ -128,7 +128,7 @@ export default function TaskDetail({ task, sessions, onClose }: TaskDetailProps)
         {/* Associated sessions */}
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: 'var(--text-secondary)' }}>
-            Sessions ({taskSessions.length})
+            会话 ({taskSessions.length})
           </h3>
           {taskSessions.length === 0 ? (
             <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No agent sessions attached to this task.</p>

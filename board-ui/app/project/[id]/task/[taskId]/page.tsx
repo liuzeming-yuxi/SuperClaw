@@ -30,7 +30,7 @@ export default function TaskDetailPage() {
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'var(--text-muted)' }}>
-        Loading...
+        加载中...
       </div>
     );
   }
@@ -59,7 +59,7 @@ export default function TaskDetailPage() {
           cursor: 'pointer',
         }}
       >
-        ← Back to Board
+        ← 返回看板
       </button>
 
       {/* Header */}

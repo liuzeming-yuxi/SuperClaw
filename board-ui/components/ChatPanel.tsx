@@ -56,10 +56,10 @@ export default function ChatPanel({ sessionId, sessionAgent }: ChatPanelProps) {
           <div style={{ fontSize: 13 }}>
             {sessionId
               ? 'Session conversation will appear here.'
-              : 'OpenClaw integration coming soon.'}
+              : 'OpenClaw 集成 即将上线.'}
           </div>
           <div style={{ fontSize: 11 }}>
-            Use Feishu for now.
+            目前请使用飞书.
           </div>
         </div>
       </div>
@@ -100,7 +100,7 @@ export default function ChatPanel({ sessionId, sessionAgent }: ChatPanelProps) {
               fontSize: 13,
             }}
           >
-            Send
+            发送
           </button>
         </div>
       </div>

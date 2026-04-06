@@ -42,17 +42,17 @@ export default function Sidebar({ sessions, agents, selectedSession, onSelectSes
         <h2 style={{ fontSize: 15, fontWeight: 600 }}>{projectName}</h2>
       </div>
 
-      {/* Active Sessions */}
+      {/* 活跃会话 */}
       <div style={{ padding: '12px 0', flex: 1, overflowY: 'auto' }}>
         <div style={{ padding: '0 14px', marginBottom: 8 }}>
           <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1 }}>
-            Active Sessions
+            活跃会话
           </span>
         </div>
 
         {sessions.length === 0 ? (
           <div style={{ padding: '8px 14px', color: 'var(--text-muted)', fontSize: 12 }}>
-            No active sessions
+            没有活跃会话
           </div>
         ) : (
           sessions.map((s) => (
@@ -87,7 +87,7 @@ export default function Sidebar({ sessions, agents, selectedSession, onSelectSes
         {/* Separator */}
         <div style={{ borderTop: '1px solid var(--border)', margin: '12px 14px' }} />
 
-        {/* Persistent Agents */}
+        {/* 持久 Agent */}
         <div style={{ padding: '0 14px', marginBottom: 8 }}>
           <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1 }}>
             Agents
@@ -100,7 +100,7 @@ export default function Sidebar({ sessions, agents, selectedSession, onSelectSes
             <div>
               <div style={{ fontSize: 13, fontWeight: 500 }}>{a.name}</div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                {a.enabled ? a.type : 'disabled'}
+                {a.enabled ? a.type : '未启用'}
               </div>
             </div>
           </div>
@@ -114,7 +114,7 @@ export default function Sidebar({ sessions, agents, selectedSession, onSelectSes
         fontSize: 12,
         color: 'var(--text-muted)',
       }}>
-        Settings
+        设置
       </div>
     </div>
   );

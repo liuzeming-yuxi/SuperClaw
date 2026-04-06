@@ -5,12 +5,13 @@ import TaskCard from './TaskCard';
 import { useState } from 'react';
 
 const PHASES = [
-  { id: 'inbox', label: 'Inbox', color: '#6b7280' },
-  { id: 'aligning', label: 'Align', color: '#8b5cf6' },
-  { id: 'planned', label: 'Plan', color: '#3b82f6' },
-  { id: 'executing', label: 'Exec', color: '#f59e0b' },
-  { id: 'reviewing', label: 'Review', color: '#22c55e' },
-  { id: 'done', label: 'Done', color: '#10b981' },
+  { id: 'inbox', label: '待处理', color: '#6b7280' },
+  { id: 'aligning', label: '对齐中', color: '#8b5cf6' },
+  { id: 'planned', label: '已规划', color: '#3b82f6' },
+  { id: 'executing', label: '执行中', color: '#f59e0b' },
+  { id: 'reviewing', label: '验收中', color: '#22c55e' },
+  { id: 'done', label: '已完成', color: '#10b981' },
+  { id: 'blocked', label: '已阻塞', color: '#ef4444' },
 ];
 
 interface KanbanBoardProps {
@@ -23,7 +24,7 @@ interface KanbanBoardProps {
 export default function KanbanBoard({ projectId, tasks, onTaskClick, onRefresh }: KanbanBoardProps) {
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [showNewTask, setShowNewTask] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
+  const [new标题, setNew标题] = useState('');
 
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.setData('text/plain', taskId);
@@ -43,10 +44,10 @@ export default function KanbanBoard({ projectId, tasks, onTaskClick, onRefresh }
   };
 
   const handleCreateTask = async () => {
-    if (!newTitle.trim()) return;
+    if (!new标题.trim()) return;
     try {
-      await createTask(projectId, { title: newTitle.trim() });
-      setNewTitle('');
+      await createTask(projectId, { title: new标题.trim() });
+      setNew标题('');
       setShowNewTask(false);
       onRefresh();
     } catch (err) {
@@ -78,7 +79,7 @@ export default function KanbanBoard({ projectId, tasks, onTaskClick, onRefresh }
             fontWeight: 600,
           }}
         >
-          + New Task
+          + 新建任务
         </button>
       </div>
 
@@ -94,8 +95,8 @@ export default function KanbanBoard({ projectId, tasks, onTaskClick, onRefresh }
           <input
             autoFocus
             placeholder="Task title..."
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
+            value={new标题}
+            onChange={(e) => setNew标题(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCreateTask()}
             style={{
               flex: 1,

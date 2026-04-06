@@ -62,7 +62,7 @@ export default function ProjectBoardPage() {
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'var(--text-muted)' }}>
-        Loading...
+        加载中...
       </div>
     );
   }

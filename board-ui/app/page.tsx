@@ -48,7 +48,7 @@ export default function HomePage() {
             fontWeight: 600,
           }}
         >
-          + Add Project
+          + 添加项目
         </button>
       </div>
 
@@ -81,21 +81,21 @@ export default function HomePage() {
               style={{ ...inputStyle, gridColumn: '1 / -1' }}
             />
             <input
-              placeholder="Description (optional)"
+              placeholder="描述 (optional)"
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               style={{ ...inputStyle, gridColumn: '1 / -1' }}
             />
           </div>
           <div style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button onClick={() => setShowAdd(false)} style={cancelBtnStyle}>Cancel</button>
+            <button onClick={() => setShowAdd(false)} style={cancelBtnStyle}>取消</button>
             <button onClick={handleAdd} style={saveBtnStyle}>Save</button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <p style={{ color: 'var(--text-muted)' }}>Loading...</p>
+        <p style={{ color: 'var(--text-muted)' }}>加载中...</p>
       ) : projects.length === 0 ? (
         <div style={{
           textAlign: 'center',
@@ -104,7 +104,7 @@ export default function HomePage() {
           borderRadius: 12,
           border: '1px solid var(--border)',
         }}>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 16 }}>No projects yet. Add one to get started.</p>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 16 }}>还没有项目. Add one to get started.</p>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
@@ -133,7 +133,7 @@ export default function HomePage() {
                   <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 12 }}>{p.description}</p>
                 )}
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={statBadge}>{p.task_count} tasks</span>
+                  <span style={statBadge}>{p.task_count} 个任务</span>
                   {p.phase_counts && Object.entries(p.phase_counts).map(([phase, count]) => (
                     <span key={phase} style={{ ...statBadge, background: 'var(--bg-tertiary)' }}>
                       {phase}: {count}
