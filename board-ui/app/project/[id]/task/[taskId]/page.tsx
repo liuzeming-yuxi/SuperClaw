@@ -4,6 +4,33 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { fetchTask, fetchSessions, Task, Session } from '@/lib/api';
 
+const PHASE_LABELS: Record<string, string> = {
+  inbox: '待处理', aligning: '对齐中', planned: '已规划',
+  executing: '执行中', reviewing: '验收中', done: '已完成', blocked: '已阻塞',
+};
+
+const PHASE_COLORS: Record<string, string> = {
+  inbox: '#6b7280', aligning: '#8b5cf6', planned: '#3b82f6',
+  executing: '#f59e0b', reviewing: '#22c55e', done: '#10b981', blocked: '#ef4444',
+};
+
+const PRIORITY_LABELS: Record<string, string> = {
+  critical: '紧急', high: '高', medium: '中', low: '低',
+};
+
+const IconBack = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M10 3L5 8l5 5"/>
+  </svg>
+);
+
+const IconFile = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 1H4a1.5 1.5 0 00-1.5 1.5v11A1.5 1.5 0 004 15h8a1.5 1.5 0 001.5-1.5V5.5L9 1z"/>
+    <path d="M9 1v5h4.5"/>
+  </svg>
+);
+
 export default function TaskDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -30,7 +57,10 @@ export default function TaskDetailPage() {
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'var(--text-muted)' }}>
-        加载中...
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <div className="skeleton" style={{ width: 40, height: 40, borderRadius: '50%' }} />
+          <span>加载中...</span>
+        </div>
       </div>
     );
   }
@@ -38,7 +68,7 @@ export default function TaskDetailPage() {
   if (!task) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'var(--text-muted)' }}>
-        Task not found
+        任务未找到
       </div>
     );
   }
@@ -51,34 +81,53 @@ export default function TaskDetailPage() {
       <button
         onClick={() => router.push(`/project/${projectId}`)}
         style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
           background: 'none',
           border: 'none',
           color: 'var(--accent)',
           fontSize: 13,
           marginBottom: 20,
           cursor: 'pointer',
+          padding: '4px 0',
+          transition: 'color var(--transition-fast)',
         }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent-hover)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--accent)'; }}
       >
-        ← 返回看板
+        <IconBack /> 返回看板
       </button>
 
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <span style={{ fontFamily: 'monospace', color: 'var(--text-muted)', fontSize: 16 }}>#{task.id}</span>
-          <span className={`tier-badge tier-${task.tier}`}>{task.tier}</span>
-          <span className={`priority-badge ${task.priority}`}>{task.priority}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontFamily: 'monospace', color: 'var(--text-muted)', fontSize: 14 }}>#{task.id}</span>
+          {task.tier && <span className={`tier-badge tier-${task.tier}`}>{task.tier}</span>}
+          {task.priority && (
+            <span className={`priority-badge ${task.priority}`}>
+              {PRIORITY_LABELS[task.priority] || task.priority}
+            </span>
+          )}
           <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
             padding: '2px 10px',
-            borderRadius: 4,
-            fontSize: 12,
-            background: 'var(--bg-hover)',
-            color: 'var(--text-secondary)',
+            borderRadius: 10,
+            fontSize: 11,
+            fontWeight: 500,
+            background: `${PHASE_COLORS[task.phase] || '#6b7280'}18`,
+            color: PHASE_COLORS[task.phase] || '#6b7280',
           }}>
-            {task.phase}
+            <div style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: PHASE_COLORS[task.phase] || '#6b7280',
+            }} />
+            {PHASE_LABELS[task.phase] || task.phase}
           </span>
         </div>
-        <h1 style={{ fontSize: 24, fontWeight: 700 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em', lineHeight: 1.35 }}>
           {task.title || task.slug || `Task ${task.id}`}
         </h1>
       </div>
@@ -87,39 +136,52 @@ export default function TaskDetailPage() {
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: 12,
+        gap: 1,
         marginBottom: 24,
-        padding: 16,
-        background: 'var(--bg-secondary)',
-        borderRadius: 8,
-        border: '1px solid var(--border)',
+        background: 'var(--border)',
+        borderRadius: 'var(--radius-md)',
+        overflow: 'hidden',
       }}>
         {[
-          ['Type', task.type],
-          ['Assignee', task.assignee],
-          ['Created', new Date(task.created).toLocaleString()],
-          ['Updated', new Date(task.updated).toLocaleString()],
+          ['类型', task.type || '-'],
+          ['负责人', task.assignee || '未分配'],
+          ['创建时间', task.created ? new Date(task.created).toLocaleDateString('zh-CN') : '-'],
+          ['更新时间', task.updated ? new Date(task.updated).toLocaleDateString('zh-CN') : '-'],
         ].map(([label, value]) => (
-          <div key={label}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
+          <div key={label} style={{ padding: '12px 16px', background: 'var(--bg-secondary)' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3, fontWeight: 500 }}>{label}</div>
             <div style={{ fontSize: 13 }}>{value}</div>
           </div>
         ))}
       </div>
 
+      {/* Blocked reason */}
+      {task.blocked_reason && (
+        <div style={{
+          padding: '12px 16px',
+          background: 'var(--danger-bg)',
+          borderRadius: 'var(--radius-md)',
+          border: '1px solid rgba(239, 68, 68, 0.2)',
+          marginBottom: 24,
+        }}>
+          <div style={{ fontSize: 11, color: 'var(--danger)', fontWeight: 600, marginBottom: 4 }}>阻塞原因</div>
+          <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{task.blocked_reason}</div>
+        </div>
+      )}
+
       {/* Body */}
       {task.body && (
         <div style={{ marginBottom: 24 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Details</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>详细内容</h2>
           <pre style={{
             background: 'var(--bg-secondary)',
             border: '1px solid var(--border)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius-md)',
             padding: 16,
             fontSize: 13,
             whiteSpace: 'pre-wrap',
             color: 'var(--text-secondary)',
-            lineHeight: 1.6,
+            lineHeight: 1.65,
           }}>
             {task.body}
           </pre>
@@ -129,13 +191,25 @@ export default function TaskDetailPage() {
       {/* Artifacts */}
       {(task.spec_path || task.plan_path) && (
         <div style={{ marginBottom: 24 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Artifacts</h2>
-          <div style={{ display: 'flex', gap: 12 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>相关文档</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {task.spec_path && (
-              <div style={artifactBadge}>📋 Spec: {task.spec_path}</div>
+              <div style={artifactCard}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <IconFile />
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>规格文档</span>
+                </div>
+                <code style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{task.spec_path}</code>
+              </div>
             )}
             {task.plan_path && (
-              <div style={artifactBadge}>📝 Plan: {task.plan_path}</div>
+              <div style={artifactCard}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <IconFile />
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>执行计划</span>
+                </div>
+                <code style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{task.plan_path}</code>
+              </div>
             )}
           </div>
         </div>
@@ -143,11 +217,21 @@ export default function TaskDetailPage() {
 
       {/* Sessions */}
       <div>
-        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>
-          Agent Sessions ({taskSessions.length})
+        <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>
+          Agent 会话 ({taskSessions.length})
         </h2>
         {taskSessions.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No agent sessions attached.</p>
+          <div style={{
+            textAlign: 'center',
+            padding: '32px 20px',
+            background: 'var(--bg-secondary)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border)',
+            color: 'var(--text-muted)',
+          }}>
+            <div style={{ fontSize: 13, marginBottom: 4 }}>暂无关联会话</div>
+            <div style={{ fontSize: 11 }}>Agent 开始处理后会话将在此显示</div>
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {taskSessions.map((s) => (
@@ -158,13 +242,26 @@ export default function TaskDetailPage() {
                 padding: '10px 14px',
                 background: 'var(--bg-secondary)',
                 border: '1px solid var(--border)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
               }}>
-                <span style={{ fontSize: 16 }}>{s.icon}</span>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>#{s.id} {s.agent}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{s.status}</div>
+                <div style={{
+                  width: 7, height: 7, borderRadius: '50%',
+                  background: s.status === 'executing' ? 'var(--warning)' : s.status === 'done' ? 'var(--success)' : 'var(--info)',
+                  flexShrink: 0,
+                }} />
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>{s.agent}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>#{s.id}</span>
                 </div>
+                <span style={{
+                  fontSize: 11, padding: '2px 8px', borderRadius: 8,
+                  background: 'var(--bg-hover)', color: 'var(--text-muted)',
+                }}>
+                  {s.status === 'aligning' ? '对齐中' :
+                   s.status === 'executing' ? '执行中' :
+                   s.status === 'reviewing' ? '验收中' :
+                   s.status === 'done' ? '已完成' : s.status}
+                </span>
               </div>
             ))}
           </div>
@@ -174,12 +271,9 @@ export default function TaskDetailPage() {
   );
 }
 
-const artifactBadge: React.CSSProperties = {
+const artifactCard: React.CSSProperties = {
   background: 'var(--bg-secondary)',
   border: '1px solid var(--border)',
-  padding: '8px 14px',
-  borderRadius: 8,
-  fontSize: 13,
-  color: 'var(--text-secondary)',
-  fontFamily: 'monospace',
+  padding: '12px 16px',
+  borderRadius: 'var(--radius-md)',
 };

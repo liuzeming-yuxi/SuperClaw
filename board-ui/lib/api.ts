@@ -42,6 +42,18 @@ export interface Agent {
   enabled: boolean;
 }
 
+export interface DirEntry {
+  name: string;
+  path: string;
+  has_git: boolean;
+}
+
+export interface BrowseResult {
+  current: string;
+  parent: string;
+  directories: DirEntry[];
+}
+
 export async function fetchProjects(): Promise<Project[]> {
   const res = await fetch(`${API_BASE}/api/projects`);
   if (!res.ok) throw new Error('Failed to fetch projects');
@@ -104,5 +116,12 @@ export async function fetchSessions(projectId: string): Promise<Session[]> {
 export async function fetchAgents(projectId: string): Promise<Agent[]> {
   const res = await fetch(`${API_BASE}/api/projects/${projectId}/agents`);
   if (!res.ok) throw new Error('Failed to fetch agents');
+  return res.json();
+}
+
+export async function browseFilesystem(path?: string): Promise<BrowseResult> {
+  const params = path ? `?path=${encodeURIComponent(path)}` : '';
+  const res = await fetch(`${API_BASE}/api/filesystem/browse${params}`);
+  if (!res.ok) throw new Error('Failed to browse filesystem');
   return res.json();
 }

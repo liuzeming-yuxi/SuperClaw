@@ -48,6 +48,7 @@ func main() {
 	r.Patch("/api/projects/{projectId}/tasks/{taskId}/move", handler.MoveTask)
 	r.Get("/api/projects/{projectId}/sessions", handler.ListSessions)
 	r.Get("/api/projects/{projectId}/agents", handler.ListAgents)
+	r.Get("/api/filesystem/browse", handler.BrowseFilesystem)
 
 	// WebSocket
 	r.Get("/ws", hub.HandleWS)

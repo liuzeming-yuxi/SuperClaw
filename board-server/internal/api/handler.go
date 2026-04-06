@@ -3,6 +3,10 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -251,4 +255,90 @@ func (h *Handler) ListAgents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, agents)
+}
+
+// GET /api/filesystem/browse?path=/root
+func (h *Handler) BrowseFilesystem(w http.ResponseWriter, r *http.Request) {
+	requestedPath := r.URL.Query().Get("path")
+	if requestedPath == "" {
+		requestedPath = "/root"
+	}
+
+	// Clean and resolve the path
+	cleanPath := filepath.Clean(requestedPath)
+
+	// Security: prevent traversal above /
+	if !strings.HasPrefix(cleanPath, "/") {
+		writeError(w, 400, "path must be absolute")
+		return
+	}
+
+	// Verify the path exists and is a directory
+	info, err := os.Stat(cleanPath)
+	if err != nil {
+		writeError(w, 404, "path not found")
+		return
+	}
+	if !info.IsDir() {
+		writeError(w, 400, "path is not a directory")
+		return
+	}
+
+	// Evaluate symlinks to prevent escaping
+	realPath, err := filepath.EvalSymlinks(cleanPath)
+	if err != nil {
+		writeError(w, 400, "cannot resolve path")
+		return
+	}
+
+	entries, err := os.ReadDir(realPath)
+	if err != nil {
+		writeError(w, 500, "cannot read directory")
+		return
+	}
+
+	type DirEntry struct {
+		Name   string `json:"name"`
+		Path   string `json:"path"`
+		HasGit bool   `json:"has_git"`
+	}
+
+	dirs := make([]DirEntry, 0)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		// Skip hidden dirs except common ones
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+		fullPath := filepath.Join(realPath, name)
+		// Check if this directory contains .git
+		_, gitErr := os.Stat(filepath.Join(fullPath, ".git"))
+		dirs = append(dirs, DirEntry{
+			Name:   name,
+			Path:   fullPath,
+			HasGit: gitErr == nil,
+		})
+	}
+
+	sort.Slice(dirs, func(i, j int) bool {
+		// Git repos first, then alphabetical
+		if dirs[i].HasGit != dirs[j].HasGit {
+			return dirs[i].HasGit
+		}
+		return dirs[i].Name < dirs[j].Name
+	})
+
+	parent := filepath.Dir(realPath)
+	if parent == realPath {
+		parent = ""
+	}
+
+	writeJSON(w, 200, map[string]interface{}{
+		"current":     realPath,
+		"parent":      parent,
+		"directories": dirs,
+	})
 }
