@@ -189,3 +189,13 @@ export async function browseFilesystem(path?: string): Promise<BrowseResult> {
   if (!res.ok) throw new Error('Failed to browse filesystem');
   return res.json();
 }
+
+export async function mkdirFilesystem(path: string): Promise<{ path: string }> {
+  const res = await fetch(`${API_BASE}/api/filesystem/mkdir`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  });
+  if (!res.ok) throw new Error('Failed to create directory');
+  return res.json();
+}

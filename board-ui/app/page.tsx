@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { fetchProjects, createProject, browseFilesystem, Project, DirEntry } from '@/lib/api';
+import { fetchProjects, createProject, browseFilesystem, mkdirFilesystem, Project, DirEntry } from '@/lib/api';
 import Link from 'next/link';
 
 // SVG Icons as components
@@ -75,6 +75,8 @@ function DirectoryPicker({
   const [currentPath, setCurrentPath] = useState('/root');
   const [parentPath, setParentPath] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [showNewFolder, setShowNewFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
 
   const loadDir = useCallback(async (path: string) => {
     setLoading(true);
@@ -177,6 +179,72 @@ function DirectoryPicker({
           >
             <IconBack />
             <span>上级目录</span>
+          </button>
+        )}
+        {/* New folder button/input */}
+        {showNewFolder ? (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 12px',
+            borderBottom: '1px solid var(--border-subtle)',
+          }}>
+            <span style={{ color: 'var(--accent)', display: 'flex' }}><IconFolder /></span>
+            <input
+              autoFocus
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={async (e) => {
+                if (e.key === 'Enter' && newFolderName.trim()) {
+                  await mkdirFilesystem(currentPath + '/' + newFolderName.trim());
+                  setShowNewFolder(false);
+                  setNewFolderName('');
+                  loadDir(currentPath);
+                } else if (e.key === 'Escape') {
+                  setShowNewFolder(false);
+                  setNewFolderName('');
+                }
+              }}
+              placeholder="文件夹名称，回车确认"
+              style={{
+                flex: 1,
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--accent)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '4px 8px',
+                fontSize: 13,
+                color: 'var(--text-primary)',
+                outline: 'none',
+              }}
+            />
+            <button
+              onClick={() => { setShowNewFolder(false); setNewFolderName(''); }}
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer' }}
+            >取消</button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowNewFolder(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              width: '100%',
+              padding: '7px 12px',
+              background: 'none',
+              border: 'none',
+              borderBottom: '1px solid var(--border-subtle)',
+              color: 'var(--accent)',
+              fontSize: 13,
+              textAlign: 'left',
+              cursor: 'pointer',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(99, 102, 241, 0.08)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <span style={{ fontSize: 16, lineHeight: '16px' }}>+</span>
+            <span>新建文件夹</span>
           </button>
         )}
         {loading ? (

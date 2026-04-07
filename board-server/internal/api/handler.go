@@ -450,6 +450,31 @@ func (h *Handler) ListAgents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, agents)
 }
 
+// POST /api/filesystem/mkdir
+func (h *Handler) MkdirFilesystem(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "invalid request")
+		return
+	}
+	if req.Path == "" {
+		writeError(w, 400, "path is required")
+		return
+	}
+	cleanPath := filepath.Clean(req.Path)
+	if !strings.HasPrefix(cleanPath, "/") {
+		writeError(w, 400, "path must be absolute")
+		return
+	}
+	if err := os.MkdirAll(cleanPath, 0755); err != nil {
+		writeError(w, 500, "cannot create directory: "+err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]string{"path": cleanPath})
+}
+
 // GET /api/filesystem/browse?path=/root
 func (h *Handler) BrowseFilesystem(w http.ResponseWriter, r *http.Request) {
 	requestedPath := r.URL.Query().Get("path")
