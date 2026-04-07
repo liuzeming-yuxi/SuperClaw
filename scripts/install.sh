@@ -204,10 +204,10 @@ else
     ok "Backed up: $CLAUDE_SETTINGS"
 
     if ! $DRY_RUN; then
-      # Check if hooks already configured
-      STOP_EXISTS=$(jq -e '.hooks.Stop[]? | .hooks[]? | select(.command | contains("superclaw"))' "$CLAUDE_SETTINGS" 2>/dev/null && echo yes || echo no)
-      PTU_EXISTS=$(jq -e '.hooks.PostToolUse[]? | .hooks[]? | select(.command | contains("superclaw"))' "$CLAUDE_SETTINGS" 2>/dev/null && echo yes || echo no)
-      if [[ "$STOP_EXISTS" == "yes" ]] && [[ "$PTU_EXISTS" == "yes" ]]; then
+      # Check if hooks already configured (search nested .hooks[].hooks[].command)
+      STOP_EXISTS=$(jq -r '[.hooks.Stop[]?.hooks[]?.command // empty] | map(select(contains("superclaw"))) | length' "$CLAUDE_SETTINGS" 2>/dev/null)
+      PTU_EXISTS=$(jq -r '[.hooks.PostToolUse[]?.hooks[]?.command // empty] | map(select(contains("superclaw"))) | length' "$CLAUDE_SETTINGS" 2>/dev/null)
+      if [[ "${STOP_EXISTS:-0}" -gt 0 ]] && [[ "${PTU_EXISTS:-0}" -gt 0 ]]; then
         warn "SuperClaw hooks already in settings.json — skipping"
       else
         jq --arg notify "$HOOKS_DIR/superclaw-notify.sh" \
