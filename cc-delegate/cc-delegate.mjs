@@ -118,11 +118,16 @@ function trackChild(child) {
   child.on("exit", () => activeChildren.delete(child));
 }
 
-// Forward SIGTERM/SIGINT to all active children, then exit.
+// Forward SIGTERM/SIGINT to all active children (detached process groups), then exit.
 for (const sig of ["SIGTERM", "SIGINT"]) {
   process.on(sig, () => {
     for (const child of activeChildren) {
-      child.kill(sig);
+      try {
+        // Kill the child's entire process group (negative PID)
+        process.kill(-child.pid, sig);
+      } catch {
+        // Process may have already exited
+      }
     }
     // Give children a moment to exit, then force-quit
     setTimeout(() => process.exit(1), 5000).unref();
@@ -131,7 +136,7 @@ for (const sig of ["SIGTERM", "SIGINT"]) {
 
 function spawnChecked(command, args, env = process.env) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: "inherit", env });
+    const child = spawn(command, args, { stdio: "inherit", env, detached: true });
     trackChild(child);
     child.on("error", reject);
     child.on("exit", (code, signal) => {
@@ -146,6 +151,7 @@ function spawnObserved(command, args, env = process.env) {
     const child = spawn(command, args, {
       stdio: ["inherit", "pipe", "pipe"],
       env,
+      detached: true,
     });
     trackChild(child);
     let stdout = "";
@@ -177,6 +183,7 @@ function spawnCaptured(command, args, env = process.env) {
     const child = spawn(command, args, {
       stdio: ["ignore", "pipe", "pipe"],
       env,
+      detached: true,
     });
     trackChild(child);
     let stdout = "";
@@ -306,7 +313,15 @@ function enforceOpusGuardrail(opts) {
     fail("Opus session requires --fresh-session for first use so the wrapper can bind it.");
   }
   if (remembered.model !== "opus") {
-    fail("Remembered session was not Opus. Start fresh with: session start --name <name>");
+    // Allow model upgrade (e.g. sonnet → opus) — just warn and update the manifest.
+    info(`Session "${opts.sessionName}" was ${remembered.model}, upgrading to opus.`);
+    remembered.model = "opus";
+    const manifest = readManifest();
+    const key = scopeKey(opts.cwd, opts.sessionName);
+    if (manifest.sessions[key]) {
+      manifest.sessions[key].model = "opus";
+      writeManifest(manifest);
+    }
   }
 }
 
