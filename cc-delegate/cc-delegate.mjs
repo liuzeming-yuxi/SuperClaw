@@ -846,6 +846,9 @@ if (isMainModule) {
   const isShortSubcommand = process.argv.some((a) => a === "status" || a === "list" || a === "show");
 
   if (needsIsolation && !isShortSubcommand) {
+    // Load .env BEFORE re-exec so SUPERCLAW_* vars are in the child's environment
+    ensureEnv();
+
     // Check if setsid is available
     const setsidProbe = spawnSync("setsid", ["--version"], { stdio: "ignore" });
     if (!setsidProbe.error) {
