@@ -151,3 +151,94 @@ Key behaviors:
 - **Opus guardrail**: Prevents session continue on non-wrapper-tracked sessions (avoids model drift)
 - **Auto-retry**: If Claude session reports reconnect, retries the prompt once
 - **`--approve-all`**: All tool calls are auto-approved (no interactive prompts)
+- **Process isolation**: Automatically re-execs under `setsid` for exec/session commands, creating an independent session group that survives Gateway restarts
+- **Signal forwarding**: On SIGTERM/SIGINT, forwards signal to child process groups for graceful shutdown
+
+## Long-Running Task Guidelines
+
+CC tasks (especially Opus with large codebases) can run 10-40 minutes. Follow these rules to prevent process death:
+
+### CRITICAL: exec timeout
+
+When calling cc-delegate via the `exec` tool, you **MUST** set a sufficient timeout:
+
+```bash
+# BAD — default 5s timeout will kill cc-delegate immediately
+exec: node /root/cc-delegate/cc-delegate.mjs exec --prompt "..."
+
+# GOOD — set exec timeout to match --timeout
+exec timeout=2400: node /root/cc-delegate/cc-delegate.mjs exec --timeout 2400 --prompt "..."
+```
+
+The `exec` tool timeout and cc-delegate's `--timeout` are DIFFERENT things:
+- `exec timeout=N` — how long OpenClaw waits for the command to finish
+- `--timeout N` — how long CC is allowed to run
+
+**Both must be set, and exec timeout should be >= --timeout.**
+
+### Recommended exec patterns
+
+**Short tasks (< 5 min):**
+```bash
+exec timeout=300: node /root/cc-delegate/cc-delegate.mjs exec \
+  --cwd /path/to/project --model sonnet --timeout 300 \
+  --prompt "simple task"
+```
+
+**Long tasks (5-40 min):**
+```bash
+exec timeout=2400: node /root/cc-delegate/cc-delegate.mjs exec \
+  --cwd /path/to/project --model opus --timeout 2400 \
+  --prompt "complex task"
+```
+
+**Very long tasks (> 40 min) — fire and forget:**
+```bash
+exec timeout=10: setsid node /root/cc-delegate/cc-delegate.mjs exec \
+  --cwd /path/to/project --model opus --timeout 7200 \
+  --file /tmp/prompt.md > /tmp/cc-output.log 2>&1 &
+echo "CC started, PID=$!"
+```
+Then poll the output periodically:
+```bash
+exec timeout=5: tail -20 /tmp/cc-output.log
+```
+
+### Monitoring running CC tasks
+
+Check if CC is still alive:
+```bash
+exec timeout=5: pgrep -fa "cc-delegate\|acpx\|claude" | head -10
+```
+
+Check recent tool activity:
+```bash
+exec timeout=5: tail -5 ~/.superclaw/state/tool_log.jsonl
+```
+
+View session context after completion:
+```bash
+exec timeout=30: node /root/cc-delegate/cc-delegate.mjs session show \
+  --name my-session --cwd /path/to/project --last 5
+```
+
+## Known Issue: Gateway crash on /stop during CC execution
+
+**Symptom**: When the user runs `/stop` or `/new` while cc-delegate is executing, the Gateway crashes with:
+
+```
+Unhandled promise rejection: Error: Agent listener invoked outside active run
+    at Agent.processEvents (pi-agent-core/src/agent.ts:533:10)
+```
+
+**Root cause**: OpenClaw's exec supervisor does not detach the stdout listener when the agent run is aborted. When cc-delegate continues to output to stdout after the run ends, the stale listener triggers `processEvents` which throws because the run is no longer active. This unhandled rejection crashes the Gateway, and systemd sends SIGTERM to the entire cgroup.
+
+**Mitigation (cc-delegate side)**:
+- cc-delegate auto-re-execs under `setsid`, creating an independent session group
+- Child processes spawned with `detached: true`
+- These prevent Gateway's SIGTERM from killing the CC process tree
+
+**Root fix needed (OpenClaw side)**:
+- `exec-defaults`: detach stdout/stderr listener when agent run is aborted
+- Or: `Agent.processEvents` should guard against calls outside active run (ignore instead of throw)
+- Reference: `pi-agent-core/src/agent.ts:533`

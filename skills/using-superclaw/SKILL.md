@@ -92,8 +92,41 @@ align → plan → execute → verify → deliver
 - **exec**：一次性任务（plan 生成、快速验证）
 - **session start**：开始一个新的开发任务
 - **session continue**：继续同一个任务
+- **session show**：查看历史对话上下文
 - **--cwd** 必须指向项目目录
 - **prompt 要写清楚**：给 CC 的指令要包含完整上下文（spec 内容、plan 内容），不要假设 CC 记得之前的对话
+
+### exec timeout 铁律
+
+调 cc-delegate 时，**必须给 exec tool 设置足够的 timeout**。默认 5 秒会导致 cc-delegate 被提前杀掉。
+
+```bash
+# 短任务（< 5 分钟）
+exec timeout=300: node /root/cc-delegate/cc-delegate.mjs exec --timeout 300 --prompt "..."
+
+# 长任务（5-40 分钟，典型的 execute 阶段）
+exec timeout=2400: node /root/cc-delegate/cc-delegate.mjs exec --timeout 2400 --prompt "..."
+```
+
+**exec timeout 必须 >= cc-delegate 的 --timeout 值。**
+
+### 长任务监控
+
+CC 跑长任务时，定期检查是否还活着：
+
+```bash
+exec timeout=5: pgrep -fa "cc-delegate\|acpx\|claude" | head -5
+exec timeout=5: tail -5 ~/.superclaw/state/tool_log.jsonl
+```
+
+CC 完成后，查看产出：
+```bash
+exec timeout=30: node /root/cc-delegate/cc-delegate.mjs session show --name <name> --cwd <path> --last 3
+```
+
+### 已知问题：用户 /stop 导致 Gateway 崩溃
+
+如果用户在 CC 执行期间发 /stop 或 /new，Gateway 可能因 exec supervisor stdout listener 未清理而崩溃（`Agent listener invoked outside active run`）。cc-delegate 已通过 setsid 进程隔离做了防御，但最好**不要在 CC 执行期间 abort agent run**。如果必须中断，先 kill CC 进程，再 /stop。
 
 ## 最后
 

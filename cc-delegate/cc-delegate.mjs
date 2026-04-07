@@ -789,7 +789,43 @@ export { parseArgs, ensureEnv, classifyPromptState, scopeKey, stripQuotes, valid
 // Only run main() when executed directly (not when imported for testing)
 const isMainModule = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMainModule) {
-  main().catch((err) => {
-    fail(err instanceof Error ? err.message : String(err));
-  });
+  // ─── setsid self-re-exec ────────────────────────────────────────────────────
+  // When running under a service manager (systemd), cc-delegate is in the
+  // Gateway's cgroup.  If Gateway crashes, systemd sends SIGTERM to the entire
+  // cgroup, killing cc-delegate and its children.  To isolate, we re-exec
+  // ourselves under `setsid` so the whole process tree is in its own session.
+  //
+  // Detection: SUPERCLAW_SETSID_DONE is set after the re-exec to avoid loops.
+  // Skip for short commands (status, list, show) that don't spawn long-lived children.
+  const needsIsolation = !process.env.SUPERCLAW_SETSID_DONE
+    && process.argv.some((a) => a === "exec" || a === "session");
+  const isShortSubcommand = process.argv.some((a) => a === "status" || a === "list" || a === "show");
+
+  if (needsIsolation && !isShortSubcommand) {
+    // Check if setsid is available
+    const setsidProbe = spawnSync("setsid", ["--version"], { stdio: "ignore" });
+    if (!setsidProbe.error) {
+      const scriptPath = fileURLToPath(import.meta.url);
+      const childEnv = { ...process.env, SUPERCLAW_SETSID_DONE: "1" };
+      const child = spawn("setsid", ["node", scriptPath, ...process.argv.slice(2)], {
+        stdio: "inherit",
+        env: childEnv,
+        detached: false, // setsid already creates a new session
+      });
+      child.on("exit", (code) => process.exit(code ?? 1));
+      child.on("error", (err) => {
+        process.stderr.write(`[cc-delegate] setsid re-exec failed: ${err.message}\n`);
+        process.exit(1);
+      });
+    } else {
+      // setsid not available, run directly
+      main().catch((err) => {
+        fail(err instanceof Error ? err.message : String(err));
+      });
+    }
+  } else {
+    main().catch((err) => {
+      fail(err instanceof Error ? err.message : String(err));
+    });
+  }
 }
