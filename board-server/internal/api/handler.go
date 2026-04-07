@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -102,6 +103,29 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, err.Error())
 		return
 	}
+
+	// Initialize .superclaw directory structure in the project path
+	scDir := filepath.Join(p.Path, ".superclaw")
+	subDirs := []string{
+		"board/inbox", "board/aligning", "board/planned", "board/executing",
+		"board/reviewing", "board/done", "board/blocked",
+		"config", "specs", "plans", "progress", "reports", "context",
+		"agents",
+	}
+	for _, d := range subDirs {
+		os.MkdirAll(filepath.Join(scDir, d), 0755)
+	}
+	// Create default board.yaml
+	boardYaml := filepath.Join(scDir, "config", "board.yaml")
+	if _, err := os.Stat(boardYaml); os.IsNotExist(err) {
+		os.WriteFile(boardYaml, []byte("next_id: 1\ndefault_tier: T2\n"), 0644)
+	}
+	// Create default project-context.md
+	ctxFile := filepath.Join(scDir, "context", "project-context.md")
+	if _, err := os.Stat(ctxFile); os.IsNotExist(err) {
+		os.WriteFile(ctxFile, []byte(fmt.Sprintf("# %s\n\n%s\n", p.Name, p.Description)), 0644)
+	}
+
 	writeJSON(w, 201, p)
 }
 
