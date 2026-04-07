@@ -66,6 +66,26 @@ align → plan → execute → verify → deliver
 - **有限信任 Claude Code**：CC 的执行报告需要独立验证（verify 阶段）
 - **不信任 CC 的自我声明**：CC 说"测试全过"→ 你自己跑一遍
 
+## Session 复用铁律
+
+**一个功能 = 一个 session，贯穿所有阶段。**
+
+session 命名：`superclaw-<feature>`（不带阶段前缀）。
+
+| 场景 | 命令 | 原因 |
+|---|---|---|
+| 快速查询、代码检查（< 2 分钟） | `exec` | 一次性，轻量 |
+| **plan 阶段首次启动** | **`session start --name superclaw-<feature>`** | CC 探索代码库，建立上下文 |
+| **execute 阶段** | **`session continue --name superclaw-<feature>`** | 复用 plan 阶段的代码库理解 |
+| **verify 失败后回到 plan/execute** | **`session continue`** | 继续同一个 session，不从头来 |
+| 中途需要沟通（NEEDS_CONTEXT 等） | `session continue` | 延续上下文 |
+
+**关键规则：**
+- `session start` 只在一个功能的第一次 CC 交互时使用
+- 之后 plan → execute → 修复 → 再执行，全部用 `session continue`
+- CC 已经在 plan 阶段深度探索过代码库，复用 session 避免重复探索
+- execute 阶段用 `exec` 是严重错误：跑了 30 分钟被 kill 全丢，无法恢复
+
 ## 红旗思维
 
 这些想法说明你在越界：
@@ -89,8 +109,8 @@ align → plan → execute → verify → deliver
 
 通过 cc-delegate 与 Claude Code 通信。核心规则：
 
-- **exec**：一次性任务（plan 生成、快速验证）
-- **session start**：开始一个新的开发任务
+- **exec**：一次性任务（plan 生成、快速验证）— **禁止用于 execute 阶段**
+- **session start**：开始一个新的开发任务 — **execute 阶段必须用这个**
 - **session continue**：继续同一个任务
 - **session show**：查看历史对话上下文
 - **--cwd** 必须指向项目目录

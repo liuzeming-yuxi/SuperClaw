@@ -79,7 +79,7 @@ Plan 必须经过 review 才能执行。
 
 ```bash
 cc-delegate session start \
-  --name "superclaw-plan-<feature>" \
+  --name "superclaw-<feature>" \
   --cwd <project-dir> \
   --prompt "
 你现在是 SuperClaw plan 阶段的技术规划者。
@@ -118,7 +118,7 @@ Claude Code 出 plan 后，OpenClaw 独立检查：
 ### Review 结果
 
 - **通过** → 进入人类 review gate
-- **有问题** → 发修改意见给 CC session → CC 修改 → 重新 review
+- **有问题** → `cc-delegate session continue --name "superclaw-<feature>"` 发修改意见 → CC 修改 → 重新 review
 
 ## 人类 Review Gate
 
@@ -164,7 +164,9 @@ Plan approved 后，给用户选执行方式：
 
 > "Plan 已确认，执行方式：[subagent/inline]。开始执行阶段。"
 
-invoke `superclaw:execute`（传入 plan 路径 + 执行方式）
+invoke `superclaw:execute`（传入 plan 路径 + 执行方式 + session 名称 `superclaw-<feature>`）
+
+**重要：session 命名用 `superclaw-<feature>`（不带阶段前缀）。execute 阶段会 `session continue` 同一个 session，复用 plan 阶段 CC 对代码库的理解，避免重复探索。**
 
 ## Anti-Pattern
 

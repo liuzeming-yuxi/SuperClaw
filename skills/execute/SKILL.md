@@ -51,8 +51,8 @@ OpenClaw 只需要：**启动 → 等结果 → 收到通知后触发 verify**
 ## 流程
 
 ```
-收到 approved plan + 执行方式
-  → cc-delegate session start（传入 plan + 执行指令）
+收到 approved plan + 执行方式 + session 名称
+  → cc-delegate session continue（复用 plan 阶段的 session）
   → Claude Code 自治区域
       │  ┌─────────────────────────────────────────┐
       │  │ 读 plan → 逐 task 执行                    │
@@ -79,9 +79,11 @@ OpenClaw 只需要：**启动 → 等结果 → 收到通知后触发 verify**
 
 ### Subagent 模式（推荐）
 
+**复用 plan 阶段的 session**——CC 已经探索过代码库，直接 continue 而不是 start 新 session：
+
 ```bash
-cc-delegate session start \
-  --name "superclaw-exec-<feature>" \
+cc-delegate session continue \
+  --name "superclaw-<feature>" \
   --cwd <project-dir> \
   --prompt "
 你现在是 SuperClaw execute 阶段的执行者。
@@ -111,8 +113,8 @@ cc-delegate session start \
 ### Inline 模式
 
 ```bash
-cc-delegate session start \
-  --name "superclaw-exec-<feature>" \
+cc-delegate session continue \
+  --name "superclaw-<feature>" \
   --cwd <project-dir> \
   --prompt "
 使用 superpowers:executing-plans 执行下面的 plan。
