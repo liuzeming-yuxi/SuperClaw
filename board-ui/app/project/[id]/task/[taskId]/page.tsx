@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { fetchTask, fetchSessions, Task, TaskSession } from '@/lib/api';
+import { fetchTask, fetchSessions, triggerTask, fetchPipelineStatus, Task, TaskSession, PipelineTaskStatus } from '@/lib/api';
+import { subscribe } from '@/lib/ws';
 
 const PHASE_LABELS: Record<string, string> = {
   inbox: '待处理', aligning: '对齐中', planned: '已规划',
@@ -12,6 +13,18 @@ const PHASE_LABELS: Record<string, string> = {
 const PHASE_COLORS: Record<string, string> = {
   inbox: '#6b7280', aligning: '#8b5cf6', planned: '#3b82f6',
   executing: '#f59e0b', reviewing: '#22c55e', done: '#10b981', blocked: '#ef4444',
+};
+
+// Actions available for each phase
+const PHASE_ACTIONS: Record<string, { action: string; label: string; color: string }[]> = {
+  inbox: [{ action: 'start_align', label: '开始对齐', color: '#8b5cf6' }],
+  aligning: [{ action: 'approve_spec', label: '确认规格', color: '#3b82f6' }],
+  planned: [{ action: 'dispatch', label: '开始执行', color: '#f59e0b' }],
+  executing: [{ action: 'verify', label: '触发验收', color: '#22c55e' }],
+  reviewing: [
+    { action: 'approve', label: '通过验收', color: '#10b981' },
+    { action: 'verify', label: '重新验收', color: '#f59e0b' },
+  ],
 };
 
 const IconBack = () => (
@@ -27,6 +40,24 @@ const IconFile = () => (
   </svg>
 );
 
+const IconPlay = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+    <path d="M4 2.5v11l9-5.5z"/>
+  </svg>
+);
+
+const IconSpinner = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+    <path d="M8 1a7 7 0 106.93 6"/>
+  </svg>
+);
+
+const ACTION_LABELS: Record<string, string> = {
+  generating_plan: '正在生成计划...',
+  executing_code: '正在执行代码...',
+  verifying: '正在验收...',
+};
+
 export default function TaskDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -36,19 +67,60 @@ export default function TaskDetailPage() {
   const [task, setTask] = useState<Task | null>(null);
   const [sessions, setSessions] = useState<TaskSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [triggering, setTriggering] = useState(false);
+  const [triggerError, setTriggerError] = useState<string | null>(null);
+  const [pipelineStatus, setPipelineStatus] = useState<PipelineTaskStatus | null>(null);
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     Promise.all([
       fetchTask(projectId, taskId),
       fetchSessions(projectId),
-    ])
-      .then(([t, s]) => {
-        setTask(t);
-        setSessions(s || []);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    ]).then(([t, s]) => {
+      setTask(t);
+      setSessions(s || []);
+    }).catch(console.error);
+
+    fetchPipelineStatus(projectId).then((ps) => {
+      setPipelineStatus(ps.running[taskId] || null);
+    }).catch(() => {});
   }, [projectId, taskId]);
+
+  useEffect(() => {
+    reload();
+    setLoading(false);
+  }, [reload]);
+
+  // Subscribe to WebSocket for real-time updates
+  useEffect(() => {
+    const unsub = subscribe((msg) => {
+      if (msg.type === 'pipeline_phase_changed' ||
+          msg.type === 'pipeline_action_started' ||
+          msg.type === 'pipeline_action_completed' ||
+          msg.type === 'task_moved' ||
+          msg.type === 'task_updated' ||
+          msg.type === 'session_created' ||
+          msg.type === 'session_updated' ||
+          msg.type === 'artifact_updated') {
+        // Reload task data on pipeline events
+        reload();
+      }
+    });
+    return unsub;
+  }, [reload]);
+
+  const handleTrigger = async (action: string) => {
+    setTriggering(true);
+    setTriggerError(null);
+    try {
+      await triggerTask(projectId, taskId, action);
+      // Reload after trigger
+      setTimeout(reload, 500);
+    } catch (err) {
+      setTriggerError(err instanceof Error ? err.message : '操作失败');
+    } finally {
+      setTriggering(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -70,9 +142,14 @@ export default function TaskDetailPage() {
   }
 
   const taskSessions = sessions.filter((s) => s.task_id === task.id);
+  const actions = PHASE_ACTIONS[task.phase] || [];
+  const isRunning = pipelineStatus?.status === 'running';
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', padding: '32px 24px' }}>
+      {/* Spinner keyframes */}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
       {/* Back link */}
       <button
         onClick={() => router.push(`/project/${projectId}`)}
@@ -122,6 +199,108 @@ export default function TaskDetailPage() {
           {task.title || task.slug || `Task ${task.id}`}
         </h1>
       </div>
+
+      {/* Pipeline Controls */}
+      {(actions.length > 0 || isRunning) && (
+        <div style={{
+          marginBottom: 24,
+          padding: '16px 20px',
+          background: 'var(--bg-secondary)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-md)',
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text-secondary)' }}>
+            流水线操作
+          </div>
+
+          {/* Running status */}
+          {isRunning && pipelineStatus && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 14px',
+              background: '#f59e0b12',
+              border: '1px solid #f59e0b30',
+              borderRadius: 'var(--radius-sm)',
+              marginBottom: 12,
+              fontSize: 13,
+              color: '#f59e0b',
+            }}>
+              <IconSpinner />
+              <span>{ACTION_LABELS[pipelineStatus.action] || pipelineStatus.action}</span>
+              {pipelineStatus.session_id && (
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)' }}>
+                  会话: {pipelineStatus.session_id}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Error display */}
+          {(triggerError || (pipelineStatus?.status === 'failed' && pipelineStatus?.error)) && (
+            <div style={{
+              padding: '10px 14px',
+              background: '#ef444412',
+              border: '1px solid #ef444430',
+              borderRadius: 'var(--radius-sm)',
+              marginBottom: 12,
+              fontSize: 12,
+              color: '#ef4444',
+            }}>
+              {triggerError || pipelineStatus?.error}
+            </div>
+          )}
+
+          {/* Completed status */}
+          {pipelineStatus?.status === 'completed' && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 14px',
+              background: '#10b98112',
+              border: '1px solid #10b98130',
+              borderRadius: 'var(--radius-sm)',
+              marginBottom: 12,
+              fontSize: 13,
+              color: '#10b981',
+            }}>
+              <span>&#10003;</span>
+              <span>{ACTION_LABELS[pipelineStatus.action]?.replace('正在', '').replace('...', '完成') || '操作完成'}</span>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {actions.map(({ action, label, color }) => (
+              <button
+                key={action}
+                onClick={() => handleTrigger(action)}
+                disabled={triggering || isRunning}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '8px 16px',
+                  background: (triggering || isRunning) ? 'var(--bg-hover)' : color,
+                  color: (triggering || isRunning) ? 'var(--text-muted)' : '#fff',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: (triggering || isRunning) ? 'not-allowed' : 'pointer',
+                  transition: 'opacity var(--transition-fast)',
+                  opacity: (triggering || isRunning) ? 0.6 : 1,
+                }}
+              >
+                {triggering ? <IconSpinner /> : <IconPlay />}
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Meta grid */}
       <div style={{
@@ -237,7 +416,7 @@ export default function TaskDetailPage() {
               }}>
                 <div style={{
                   width: 7, height: 7, borderRadius: '50%',
-                  background: s.status === 'executing' ? 'var(--warning)' : s.status === 'done' ? 'var(--success)' : 'var(--info)',
+                  background: s.status === 'running' ? 'var(--warning)' : s.status === 'done' ? 'var(--success)' : s.status === 'failed' ? 'var(--danger)' : 'var(--info)',
                   flexShrink: 0,
                 }} />
                 <div style={{ flex: 1 }}>
@@ -248,10 +427,10 @@ export default function TaskDetailPage() {
                   fontSize: 11, padding: '2px 8px', borderRadius: 8,
                   background: 'var(--bg-hover)', color: 'var(--text-muted)',
                 }}>
-                  {s.status === 'aligning' ? '对齐中' :
-                   s.status === 'executing' ? '执行中' :
-                   s.status === 'reviewing' ? '验收中' :
-                   s.status === 'done' ? '已完成' : s.status}
+                  {s.status === 'running' ? '运行中' :
+                   s.status === 'done' ? '已完成' :
+                   s.status === 'failed' ? '失败' :
+                   s.status === 'pending' ? '等待中' : s.status}
                 </span>
               </div>
             ))}

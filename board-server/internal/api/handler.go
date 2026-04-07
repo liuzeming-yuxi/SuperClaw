@@ -8,17 +8,38 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/superclaw/board-server/internal/board"
 	"github.com/superclaw/board-server/internal/config"
+	"github.com/superclaw/board-server/internal/pipeline"
 	"github.com/superclaw/board-server/internal/ws"
 )
 
 type Handler struct {
-	SCRoot string
-	Hub    *ws.Hub
+	SCRoot         string
+	Hub            *ws.Hub
+	PipelineConfig pipeline.PipelineConfig
+
+	pipelineMu sync.Mutex
+	pipelines  map[string]*pipeline.Pipeline // projectPath -> pipeline
+}
+
+// getPipeline returns or creates a pipeline for a project.
+func (h *Handler) getPipeline(proj *config.Project) *pipeline.Pipeline {
+	h.pipelineMu.Lock()
+	defer h.pipelineMu.Unlock()
+	if h.pipelines == nil {
+		h.pipelines = make(map[string]*pipeline.Pipeline)
+	}
+	if p, ok := h.pipelines[proj.Path]; ok {
+		return p
+	}
+	p := pipeline.New(proj.Path, h.Hub, h.PipelineConfig)
+	h.pipelines[proj.Path] = p
+	return p
 }
 
 func (h *Handler) findProject(id string) (*config.Project, error) {
@@ -602,5 +623,97 @@ func (h *Handler) BrowseFilesystem(w http.ResponseWriter, r *http.Request) {
 		"current":     realPath,
 		"parent":      parent,
 		"directories": dirs,
+	})
+}
+
+// POST /api/projects/{projectId}/tasks/{taskId}/trigger
+// Actively trigger a pipeline action on a task.
+func (h *Handler) TriggerTask(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	taskID := chi.URLParam(r, "taskId")
+
+	proj, err := h.findProject(projectID)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	if proj == nil {
+		writeError(w, 404, "project not found")
+		return
+	}
+
+	var body struct {
+		Action string `json:"action"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, 400, "invalid json")
+		return
+	}
+	if body.Action == "" {
+		writeError(w, 400, "action is required")
+		return
+	}
+
+	p := h.getPipeline(proj)
+	if err := p.TriggerTask(r.Context(), taskID, body.Action); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+
+	writeJSON(w, 200, map[string]string{
+		"status":  "ok",
+		"task_id": taskID,
+		"action":  body.Action,
+	})
+}
+
+// POST /api/projects/{projectId}/pipeline/process
+// Process all inbox tasks (batch trigger).
+func (h *Handler) ProcessPipeline(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+
+	proj, err := h.findProject(projectID)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	if proj == nil {
+		writeError(w, 404, "project not found")
+		return
+	}
+
+	p := h.getPipeline(proj)
+	processed, err := p.ProcessInbox(r.Context())
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+
+	writeJSON(w, 200, map[string]interface{}{
+		"status":    "ok",
+		"processed": processed,
+	})
+}
+
+// GET /api/projects/{projectId}/pipeline/status
+// Get pipeline status for all running/recent tasks.
+func (h *Handler) PipelineStatus(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+
+	proj, err := h.findProject(projectID)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	if proj == nil {
+		writeError(w, 404, "project not found")
+		return
+	}
+
+	p := h.getPipeline(proj)
+	status := p.GetStatus()
+
+	writeJSON(w, 200, map[string]interface{}{
+		"running": status,
 	})
 }

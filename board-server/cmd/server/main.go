@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/cors"
 
 	"github.com/superclaw/board-server/internal/api"
+	"github.com/superclaw/board-server/internal/pipeline"
 	"github.com/superclaw/board-server/internal/ws"
 )
 
@@ -27,7 +28,15 @@ func main() {
 	log.Printf("SuperClaw board server starting, root: %s", scRoot)
 
 	hub := ws.NewHub()
-	handler := &api.Handler{SCRoot: scRoot, Hub: hub}
+	handler := &api.Handler{
+		SCRoot: scRoot,
+		Hub:    hub,
+		PipelineConfig: pipeline.PipelineConfig{
+			MaxConcurrent: 2,
+			ACPXPath:      "/root/.nvm/versions/node/v22.22.0/bin/acpx",
+			EnvFile:       "/home/testclaude/cc-delegate/.env",
+		},
+	}
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -56,6 +65,11 @@ func main() {
 	r.Get("/api/filesystem/browse", handler.BrowseFilesystem)
 	r.Post("/api/filesystem/mkdir", handler.MkdirFilesystem)
 	r.Post("/api/filesystem/rename", handler.RenameFilesystem)
+
+	// Pipeline routes
+	r.Post("/api/projects/{projectId}/tasks/{taskId}/trigger", handler.TriggerTask)
+	r.Post("/api/projects/{projectId}/pipeline/process", handler.ProcessPipeline)
+	r.Get("/api/projects/{projectId}/pipeline/status", handler.PipelineStatus)
 
 	// WebSocket
 	r.Get("/ws", hub.HandleWS)

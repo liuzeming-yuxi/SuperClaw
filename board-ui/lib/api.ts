@@ -209,3 +209,43 @@ export async function renameFilesystem(oldPath: string, newName: string): Promis
   if (!res.ok) throw new Error('Failed to rename directory');
   return res.json();
 }
+
+// Pipeline API
+
+export interface PipelineTaskStatus {
+  task_id: string;
+  phase: string;
+  action: string;
+  status: string;
+  session_id: string;
+  started_at: string;
+  error?: string;
+}
+
+export async function triggerTask(projectId: string, taskId: string, action: string): Promise<{ status: string; task_id: string; action: string }> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/tasks/${taskId}/trigger`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'unknown error' }));
+    throw new Error(err.error || 'Failed to trigger task');
+  }
+  return res.json();
+}
+
+export async function processPipeline(projectId: string): Promise<{ status: string; processed: string[] }> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/pipeline/process`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) throw new Error('Failed to process pipeline');
+  return res.json();
+}
+
+export async function fetchPipelineStatus(projectId: string): Promise<{ running: Record<string, PipelineTaskStatus> }> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/pipeline/status`);
+  if (!res.ok) throw new Error('Failed to fetch pipeline status');
+  return res.json();
+}
