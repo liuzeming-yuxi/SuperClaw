@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { fetchProjects, createProject, browseFilesystem, mkdirFilesystem, Project, DirEntry } from '@/lib/api';
+import { fetchProjects, createProject, browseFilesystem, mkdirFilesystem, renameFilesystem, Project, DirEntry } from '@/lib/api';
 import Link from 'next/link';
 
 // SVG Icons as components
@@ -77,6 +77,8 @@ function DirectoryPicker({
   const [loading, setLoading] = useState(false);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   const loadDir = useCallback(async (path: string) => {
     setLoading(true);
@@ -257,13 +259,49 @@ function DirectoryPicker({
           </div>
         ) : (
           dirs.map((d) => (
-            <button
+            renamingPath === d.path ? (
+              <div key={d.path} style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 12px',
+                borderBottom: '1px solid var(--border-subtle)',
+              }}>
+                <span style={{ color: d.has_git ? '#f97316' : 'var(--text-muted)', display: 'flex' }}>
+                  {d.has_git ? <IconGit /> : <IconFolder />}
+                </span>
+                <input
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onKeyDown={async (e) => {
+                    if (e.key === 'Enter' && renameValue.trim()) {
+                      const result = await renameFilesystem(d.path, renameValue.trim());
+                      setRenamingPath(null);
+                      setRenameValue('');
+                      loadDir(currentPath);
+                      if (value === d.path) onChange(result.path);
+                    } else if (e.key === 'Escape') {
+                      setRenamingPath(null);
+                      setRenameValue('');
+                    }
+                  }}
+                  onBlur={() => { setRenamingPath(null); setRenameValue(''); }}
+                  style={{
+                    flex: 1,
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--accent)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '4px 8px',
+                    fontSize: 13,
+                    color: 'var(--text-primary)',
+                    outline: 'none',
+                  }}
+                />
+              </div>
+            ) : (
+            <div
               key={d.path}
-              onClick={() => navigateTo(d.path)}
-              onDoubleClick={() => {
-                onChange(d.path);
-                onSelect(d.path);
-              }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -271,24 +309,47 @@ function DirectoryPicker({
                 width: '100%',
                 padding: '7px 12px',
                 background: value === d.path ? 'var(--accent-glow)' : 'none',
-                border: 'none',
                 borderBottom: '1px solid var(--border-subtle)',
                 color: 'var(--text-primary)',
                 fontSize: 13,
                 textAlign: 'left',
                 transition: 'background var(--transition-fast)',
+                cursor: 'pointer',
               }}
               onMouseEnter={(e) => {
                 if (value !== d.path) { e.currentTarget.style.background = 'rgba(99, 102, 241, 0.08)'; }
+                const renBtn = e.currentTarget.querySelector('[data-rename]') as HTMLElement;
+                if (renBtn) renBtn.style.opacity = '1';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.background = value === d.path ? 'var(--accent-glow)' : 'transparent';
+                const renBtn = e.currentTarget.querySelector('[data-rename]') as HTMLElement;
+                if (renBtn) renBtn.style.opacity = '0';
               }}
+              onClick={() => navigateTo(d.path)}
             >
               <span style={{ color: d.has_git ? '#f97316' : 'var(--text-muted)', display: 'flex' }}>
                 {d.has_git ? <IconGit /> : <IconFolder />}
               </span>
               <span style={{ flex: 1 }}>{d.name}</span>
+              <button
+                data-rename
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRenamingPath(d.path);
+                  setRenameValue(d.name);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  opacity: 0,
+                  transition: 'opacity 0.15s',
+                  padding: '2px 6px',
+                }}
+              >重命名</button>
               {d.has_git && (
                 <span style={{
                   fontSize: 10,
@@ -302,7 +363,8 @@ function DirectoryPicker({
                 </span>
               )}
               <span style={{ color: 'var(--text-muted)', display: 'flex' }}><IconChevronRight /></span>
-            </button>
+            </div>
+            )
           ))
         )}
       </div>
@@ -379,10 +441,11 @@ export default function HomePage() {
   // Auto-generate id from path
   const handlePathSelect = (path: string) => {
     const name = path.split('/').filter(Boolean).pop() || '';
+    const id = name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
     setForm((f) => ({
       ...f,
       path,
-      id: f.id || name.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+      id,
       name: f.name || name,
     }));
   };
@@ -477,25 +540,14 @@ export default function HomePage() {
             </div>
 
             {/* Form fields */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-              <div>
-                <label style={labelStyle}>项目 ID</label>
-                <input
-                  placeholder="例: my-project"
-                  value={form.id}
-                  onChange={(e) => setForm({ ...form, id: e.target.value })}
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>显示名称</label>
-                <input
-                  placeholder="例: 我的项目"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  style={inputStyle}
-                />
-              </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={labelStyle}>显示名称</label>
+              <input
+                placeholder="例: 我的项目"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                style={inputStyle}
+              />
             </div>
             <div style={{ marginBottom: 16 }}>
               <label style={labelStyle}>描述（可选）</label>

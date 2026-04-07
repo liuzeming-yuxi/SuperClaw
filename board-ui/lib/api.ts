@@ -199,3 +199,13 @@ export async function mkdirFilesystem(path: string): Promise<{ path: string }> {
   if (!res.ok) throw new Error('Failed to create directory');
   return res.json();
 }
+
+export async function renameFilesystem(oldPath: string, newName: string): Promise<{ path: string }> {
+  const res = await fetch(`${API_BASE}/api/filesystem/rename`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ old_path: oldPath, new_name: newName }),
+  });
+  if (!res.ok) throw new Error('Failed to rename directory');
+  return res.json();
+}

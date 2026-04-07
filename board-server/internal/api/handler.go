@@ -475,6 +475,33 @@ func (h *Handler) MkdirFilesystem(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]string{"path": cleanPath})
 }
 
+// POST /api/filesystem/rename
+func (h *Handler) RenameFilesystem(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		OldPath string `json:"old_path"`
+		NewName string `json:"new_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "invalid request")
+		return
+	}
+	if req.OldPath == "" || req.NewName == "" {
+		writeError(w, 400, "old_path and new_name are required")
+		return
+	}
+	cleanPath := filepath.Clean(req.OldPath)
+	if !strings.HasPrefix(cleanPath, "/") {
+		writeError(w, 400, "path must be absolute")
+		return
+	}
+	newPath := filepath.Join(filepath.Dir(cleanPath), req.NewName)
+	if err := os.Rename(cleanPath, newPath); err != nil {
+		writeError(w, 500, "cannot rename: "+err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]string{"path": newPath})
+}
+
 // GET /api/filesystem/browse?path=/root
 func (h *Handler) BrowseFilesystem(w http.ResponseWriter, r *http.Request) {
 	requestedPath := r.URL.Query().Get("path")

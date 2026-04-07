@@ -55,6 +55,7 @@ func main() {
 	r.Get("/api/projects/{projectId}/agents", handler.ListAgents)
 	r.Get("/api/filesystem/browse", handler.BrowseFilesystem)
 	r.Post("/api/filesystem/mkdir", handler.MkdirFilesystem)
+	r.Post("/api/filesystem/rename", handler.RenameFilesystem)
 
 	// WebSocket
 	r.Get("/ws", hub.HandleWS)
