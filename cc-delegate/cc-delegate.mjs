@@ -22,6 +22,7 @@ const ENV_FILE = resolve(SCRIPT_DIR, ".env");
 const STATE_DIR = resolve(SCRIPT_DIR, "state");
 const CONFIG_ROOT = resolve(STATE_DIR, "claude-config");
 const MANIFEST_PATH = resolve(STATE_DIR, "sessions.json");
+const DEFAULT_SESSIONS_DIR = resolve(homedir(), ".superclaw", "state", "sessions");
 const CONFIG_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const CONFIG_MAX_DIRS = 32;
 const MANIFEST_VERSION = 1;
@@ -249,6 +250,31 @@ function rememberSession(opts, record) {
 function getRememberedSession(opts) {
   const manifest = readManifest();
   return manifest.sessions[scopeKey(opts.cwd, opts.sessionName)] ?? null;
+}
+
+// ─── Active session tracking (for heartbeat hooks) ───────────────────────────
+
+function writeActiveSession(opts, childPid, sessionsDir = DEFAULT_SESSIONS_DIR) {
+  mkdirSync(sessionsDir, { recursive: true });
+  const name = opts.sessionName || `exec-${childPid}`;
+  const filePath = resolve(sessionsDir, `${name}.json`);
+  const data = {
+    session_name: name,
+    cwd: resolve(opts.cwd || process.cwd()),
+    model: opts.model || null,
+    pid: childPid,
+    start_time: new Date().toISOString(),
+  };
+  writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
+  return filePath;
+}
+
+function removeActiveSession(opts, childPid, sessionsDir = DEFAULT_SESSIONS_DIR) {
+  const name = opts.sessionName || `exec-${childPid}`;
+  const filePath = resolve(sessionsDir, `${name}.json`);
+  const heartbeatPath = resolve(sessionsDir, `${name}.heartbeat`);
+  rmSync(filePath, { force: true });
+  rmSync(heartbeatPath, { force: true });
 }
 
 // ─── CLAUDE_CONFIG_DIR bootstrap (for model pinning) ─────────────────────────
@@ -637,8 +663,14 @@ async function cmdExec(opts, acpx) {
   ];
 
   info(`exec | model=${opts.model} | cwd=${opts.cwd || process.cwd()}`);
-  const result = await spawnObserved(acpx.command, runArgs, env);
-  process.exit(result.code);
+  writeActiveSession(opts, process.pid);
+  try {
+    const result = await spawnObserved(acpx.command, runArgs, env);
+    removeActiveSession(opts, process.pid);
+    process.exit(result.code);
+  } finally {
+    removeActiveSession(opts, process.pid);
+  }
 }
 
 async function cmdSessionStart(opts, acpx) {
@@ -667,22 +699,29 @@ async function cmdSessionStart(opts, acpx) {
   ];
 
   info(`session start | name=${opts.sessionName} | model=${opts.model}`);
-  const result = await spawnObserved(acpx.command, runArgs, env);
+  writeActiveSession(opts, process.pid);
+  try {
+    const result = await spawnObserved(acpx.command, runArgs, env);
 
-  // Update manifest after run
-  const postRecord = await readSessionRecord(acpx, opts, env);
-  if (postRecord) rememberSession(opts, postRecord);
+    // Update manifest after run
+    const postRecord = await readSessionRecord(acpx, opts, env);
+    if (postRecord) rememberSession(opts, postRecord);
 
-  // Retry on reconnect
-  if (shouldRetry(opts, result, postRecord, opts.prompt)) {
-    info("Session reconnect detected, retrying prompt once...");
-    const retry = await spawnObserved(acpx.command, runArgs, env);
-    const retryRecord = await readSessionRecord(acpx, opts, env);
-    if (retryRecord) rememberSession(opts, retryRecord);
-    process.exit(retry.code);
+    // Retry on reconnect
+    if (shouldRetry(opts, result, postRecord, opts.prompt)) {
+      info("Session reconnect detected, retrying prompt once...");
+      const retry = await spawnObserved(acpx.command, runArgs, env);
+      const retryRecord = await readSessionRecord(acpx, opts, env);
+      if (retryRecord) rememberSession(opts, retryRecord);
+      removeActiveSession(opts, process.pid);
+      process.exit(retry.code);
+    }
+
+    removeActiveSession(opts, process.pid);
+    process.exit(result.code);
+  } finally {
+    removeActiveSession(opts, process.pid);
   }
-
-  process.exit(result.code);
 }
 
 async function cmdSessionContinue(opts, acpx) {
@@ -719,20 +758,27 @@ async function cmdSessionContinue(opts, acpx) {
   ];
 
   info(`session continue | name=${opts.sessionName} | model=${opts.model}`);
-  const result = await spawnObserved(acpx.command, runArgs, env);
+  writeActiveSession(opts, process.pid);
+  try {
+    const result = await spawnObserved(acpx.command, runArgs, env);
 
-  const postRecord = await readSessionRecord(acpx, opts, env);
-  if (postRecord) rememberSession(opts, postRecord);
+    const postRecord = await readSessionRecord(acpx, opts, env);
+    if (postRecord) rememberSession(opts, postRecord);
 
-  if (shouldRetry(opts, result, postRecord, opts.prompt)) {
-    info("Session reconnect detected, retrying prompt once...");
-    const retry = await spawnObserved(acpx.command, runArgs, env);
-    const retryRecord = await readSessionRecord(acpx, opts, env);
-    if (retryRecord) rememberSession(opts, retryRecord);
-    process.exit(retry.code);
+    if (shouldRetry(opts, result, postRecord, opts.prompt)) {
+      info("Session reconnect detected, retrying prompt once...");
+      const retry = await spawnObserved(acpx.command, runArgs, env);
+      const retryRecord = await readSessionRecord(acpx, opts, env);
+      if (retryRecord) rememberSession(opts, retryRecord);
+      removeActiveSession(opts, process.pid);
+      process.exit(retry.code);
+    }
+
+    removeActiveSession(opts, process.pid);
+    process.exit(result.code);
+  } finally {
+    removeActiveSession(opts, process.pid);
   }
-
-  process.exit(result.code);
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -784,7 +830,7 @@ async function main() {
 
 // ─── Exports (for testing) ───────────────────────────────────────────────────
 
-export { parseArgs, ensureEnv, classifyPromptState, scopeKey, stripQuotes, validateEnvKey, validateEnvValue, prepareInvocationEnv };
+export { parseArgs, ensureEnv, classifyPromptState, scopeKey, stripQuotes, validateEnvKey, validateEnvValue, prepareInvocationEnv, writeActiveSession, removeActiveSession };
 
 // Only run main() when executed directly (not when imported for testing)
 const isMainModule = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);

@@ -2,9 +2,12 @@
 // Unit tests for cc-delegate.mjs pure logic functions
 // Uses node:test and node:assert (Node.js 18+)
 
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { parseArgs, classifyPromptState, scopeKey, stripQuotes, validateEnvValue } from "../../cc-delegate/cc-delegate.mjs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
+import { parseArgs, classifyPromptState, scopeKey, stripQuotes, validateEnvValue, writeActiveSession, removeActiveSession } from "../../cc-delegate/cc-delegate.mjs";
 
 // ─── stripQuotes ────────────────────────────────────────────────────────────
 
@@ -235,5 +238,78 @@ describe("scopeKey", () => {
     const key1 = scopeKey("/tmp", null);
     const key2 = scopeKey("/tmp", "__default__");
     assert.equal(key1, key2);
+  });
+});
+
+// ─── writeActiveSession / removeActiveSession ────────────────────────────────
+
+describe("writeActiveSession / removeActiveSession", () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(resolve(tmpdir(), "cc-delegate-test-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("creates session file with correct fields", () => {
+    const opts = { sessionName: "my-session", cwd: "/tmp/project", model: "opus" };
+    const pid = 12345;
+    const filePath = writeActiveSession(opts, pid, tmpDir);
+
+    assert.ok(existsSync(filePath), "session file should exist");
+    const data = JSON.parse(readFileSync(filePath, "utf8"));
+    assert.equal(data.session_name, "my-session");
+    assert.equal(data.cwd, "/tmp/project");
+    assert.equal(data.model, "opus");
+    assert.equal(data.pid, pid);
+    assert.ok(typeof data.start_time === "string" && data.start_time.length > 0, "start_time should be a non-empty string");
+  });
+
+  it("uses exec-{pid} for unnamed sessions", () => {
+    const opts = { sessionName: null, cwd: "/tmp", model: "sonnet" };
+    const pid = 99999;
+    const filePath = writeActiveSession(opts, pid, tmpDir);
+
+    assert.ok(filePath.endsWith(`exec-${pid}.json`), `expected filename exec-${pid}.json, got ${filePath}`);
+    const data = JSON.parse(readFileSync(filePath, "utf8"));
+    assert.equal(data.session_name, `exec-${pid}`);
+  });
+
+  it("returns the file path", () => {
+    const opts = { sessionName: "path-test", cwd: "/tmp", model: "opus" };
+    const filePath = writeActiveSession(opts, 1, tmpDir);
+    assert.equal(filePath, resolve(tmpDir, "path-test.json"));
+  });
+
+  it("removeActiveSession deletes the session file", () => {
+    const opts = { sessionName: "del-test", cwd: "/tmp", model: "opus" };
+    const pid = 11111;
+    const filePath = writeActiveSession(opts, pid, tmpDir);
+    assert.ok(existsSync(filePath), "file should exist before removal");
+
+    removeActiveSession(opts, pid, tmpDir);
+    assert.ok(!existsSync(filePath), "file should be deleted after removeActiveSession");
+  });
+
+  it("removeActiveSession also removes .heartbeat file", () => {
+    const opts = { sessionName: "hb-test", cwd: "/tmp", model: "opus" };
+    const pid = 22222;
+    const sessionFile = writeActiveSession(opts, pid, tmpDir);
+    const heartbeatFile = resolve(tmpDir, "hb-test.heartbeat");
+    writeFileSync(heartbeatFile, "1", "utf8");
+
+    assert.ok(existsSync(heartbeatFile), "heartbeat file should exist before removal");
+    removeActiveSession(opts, pid, tmpDir);
+    assert.ok(!existsSync(sessionFile), "session file should be deleted");
+    assert.ok(!existsSync(heartbeatFile), "heartbeat file should be deleted");
+  });
+
+  it("removeActiveSession is safe when files do not exist", () => {
+    const opts = { sessionName: "ghost-session", cwd: "/tmp", model: "opus" };
+    // Should not throw even if files don't exist
+    assert.doesNotThrow(() => removeActiveSession(opts, 12345, tmpDir));
   });
 });
