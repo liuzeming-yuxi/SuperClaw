@@ -59,6 +59,13 @@ run() {
   fi
 }
 
+# Clean up temp files on exit
+cleanup() {
+  local settings="${HOME}/.claude/settings.json.tmp"
+  [[ -f "$settings" ]] && rm -f "$settings"
+}
+trap cleanup EXIT
+
 # ─── Preflight ────────────────────────────────────────────────────────────────
 
 step "Preflight checks"
@@ -198,8 +205,8 @@ else
 
     if ! $DRY_RUN; then
       # Check if hooks already configured
-      STOP_EXISTS=$(jq -e '.hooks.Stop[]? | select(.command | contains("superclaw"))' "$CLAUDE_SETTINGS" 2>/dev/null && echo yes || echo no)
-      PTU_EXISTS=$(jq -e '.hooks.PostToolUse[]? | select(.command | contains("superclaw"))' "$CLAUDE_SETTINGS" 2>/dev/null && echo yes || echo no)
+      STOP_EXISTS=$(jq -e '.hooks.Stop[]? | .hooks[]? | select(.command | contains("superclaw"))' "$CLAUDE_SETTINGS" 2>/dev/null && echo yes || echo no)
+      PTU_EXISTS=$(jq -e '.hooks.PostToolUse[]? | .hooks[]? | select(.command | contains("superclaw"))' "$CLAUDE_SETTINGS" 2>/dev/null && echo yes || echo no)
       if [[ "$STOP_EXISTS" == "yes" ]] && [[ "$PTU_EXISTS" == "yes" ]]; then
         warn "SuperClaw hooks already in settings.json — skipping"
       else
@@ -207,14 +214,12 @@ else
            --arg progress "$HOOKS_DIR/superclaw-progress.sh" \
            '.hooks = (.hooks // {}) |
             .hooks.Stop = ((.hooks.Stop // []) + [{
-              "type": "command",
-              "command": $notify,
-              "timeout": 30
+              "matcher": "",
+              "hooks": [{"type": "command", "command": $notify, "timeout": 30}]
             }]) |
             .hooks.PostToolUse = ((.hooks.PostToolUse // []) + [{
-              "type": "command",
-              "command": $progress,
-              "timeout": 10
+              "matcher": "",
+              "hooks": [{"type": "command", "command": $progress, "timeout": 10}]
             }])' "$CLAUDE_SETTINGS" > "${CLAUDE_SETTINGS}.tmp" && \
           mv "${CLAUDE_SETTINGS}.tmp" "$CLAUDE_SETTINGS"
         ok "Configured hooks in $CLAUDE_SETTINGS"

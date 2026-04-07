@@ -25,6 +25,7 @@ const MANIFEST_PATH = resolve(STATE_DIR, "sessions.json");
 const CONFIG_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const CONFIG_MAX_DIRS = 32;
 const MANIFEST_VERSION = 1;
+const BUFFER_MAX_BYTES = 64 * 1024 * 1024; // 64 MiB cap for captured stdout/stderr
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -47,11 +48,19 @@ function stripQuotes(val) {
   return val;
 }
 
+/** Reject .env keys that aren't valid identifiers. */
+const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+function validateEnvKey(key) {
+  if (!ENV_KEY_RE.test(key)) {
+    throw new Error(`Invalid .env key "${key}". Keys must match [A-Za-z_][A-Za-z0-9_]*.`);
+  }
+}
+
 /** Reject .env values that contain shell metacharacters to prevent injection. */
-const SHELL_META_RE = /[;|`$(){}!<>&\n\r]/;
+const SHELL_META_RE = /[;|`$(){}!<>&\\\n\r]/;
 function validateEnvValue(key, val) {
   if (SHELL_META_RE.test(val)) {
-    throw new Error(`Unsafe character in .env value for ${key}. Remove shell metacharacters (;|$\`&<>(){}) from the value.`);
+    throw new Error(`Unsafe character in .env value for ${key}. Remove shell metacharacters (;|\\$\`&<>(){}\\) from the value.`);
   }
 }
 
@@ -69,8 +78,9 @@ function ensureEnv() {
         .filter((l) => l && !l.startsWith("#") && l.includes("="))
         .forEach((l) => {
           const idx = l.indexOf("=");
-          const key = l.slice(0, idx);
+          const key = l.slice(0, idx).trim();
           const val = stripQuotes(l.slice(idx + 1));
+          validateEnvKey(key);
           validateEnvValue(key, val);
           if (!process.env[key]) {
             process.env[key] = val;
@@ -100,9 +110,29 @@ function resolveAcpx() {
 
 // ─── Process spawners ────────────────────────────────────────────────────────
 
+/** Track active child processes for signal forwarding. */
+const activeChildren = new Set();
+
+function trackChild(child) {
+  activeChildren.add(child);
+  child.on("exit", () => activeChildren.delete(child));
+}
+
+// Forward SIGTERM/SIGINT to all active children, then exit.
+for (const sig of ["SIGTERM", "SIGINT"]) {
+  process.on(sig, () => {
+    for (const child of activeChildren) {
+      child.kill(sig);
+    }
+    // Give children a moment to exit, then force-quit
+    setTimeout(() => process.exit(1), 5000).unref();
+  });
+}
+
 function spawnChecked(command, args, env = process.env) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: "inherit", env });
+    trackChild(child);
     child.on("error", reject);
     child.on("exit", (code, signal) => {
       if (signal) return reject(new Error(`Killed by ${signal}`));
@@ -117,17 +147,22 @@ function spawnObserved(command, args, env = process.env) {
       stdio: ["inherit", "pipe", "pipe"],
       env,
     });
+    trackChild(child);
     let stdout = "";
     let stderr = "";
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
     child.stdout.on("data", (chunk) => {
       const text = chunk.toString("utf8");
-      stdout += text;
       process.stdout.write(text);
+      stdoutBytes += chunk.length;
+      if (stdoutBytes <= BUFFER_MAX_BYTES) stdout += text;
     });
     child.stderr.on("data", (chunk) => {
       const text = chunk.toString("utf8");
-      stderr += text;
       process.stderr.write(text);
+      stderrBytes += chunk.length;
+      if (stderrBytes <= BUFFER_MAX_BYTES) stderr += text;
     });
     child.on("error", reject);
     child.on("exit", (code, signal) => {
@@ -143,13 +178,18 @@ function spawnCaptured(command, args, env = process.env) {
       stdio: ["ignore", "pipe", "pipe"],
       env,
     });
+    trackChild(child);
     let stdout = "";
     let stderr = "";
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
     child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString("utf8");
+      stdoutBytes += chunk.length;
+      if (stdoutBytes <= BUFFER_MAX_BYTES) stdout += chunk.toString("utf8");
     });
     child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString("utf8");
+      stderrBytes += chunk.length;
+      if (stderrBytes <= BUFFER_MAX_BYTES) stderr += chunk.toString("utf8");
     });
     child.on("error", reject);
     child.on("exit", (code, signal) => {
@@ -370,6 +410,7 @@ function printUsage() {
     "  cc-delegate exec [--cwd <path>] [--model opus|sonnet] [--max-turns N] [--timeout S] [--format text|json|quiet] --prompt <text>",
     "  cc-delegate session start --name <n> [--cwd <path>] [--model opus|sonnet] --prompt <text>",
     "  cc-delegate session continue --name <n> [--cwd <path>] --prompt <text>",
+    "  cc-delegate session show --name <n> [--cwd <path>] [--last N]",
     "  cc-delegate session list",
     "  cc-delegate status",
     "",
@@ -395,6 +436,7 @@ function parseArgs(argv) {
     timeout: null,
     freshSession: false,
     resumeSession: null,
+    last: null,            // --last N: show only last N turns
     mode: null,           // derived: "exec" | "session"
   };
 
@@ -418,7 +460,7 @@ function parseArgs(argv) {
       opts.mode = "session";
       // Next arg should be subcommand
       const sub = args[0];
-      if (sub === "start" || sub === "continue" || sub === "list") {
+      if (sub === "start" || sub === "continue" || sub === "list" || sub === "show") {
         opts.subcommand = args.shift();
         if (opts.subcommand === "start") opts.freshSession = true;
       }
@@ -439,6 +481,7 @@ function parseArgs(argv) {
     if (arg === "--max-turns") { opts.maxTurns = args.shift(); continue; }
     if (arg === "--timeout") { opts.timeout = args.shift(); continue; }
     if (arg === "--resume-session") { opts.resumeSession = args.shift(); continue; }
+    if (arg === "--last") { opts.last = parseInt(args.shift(), 10); continue; }
 
     // Treat unknown as prompt text
     const rest = [arg, ...args];
@@ -490,6 +533,81 @@ async function cmdSessionList() {
   console.log("Tracked sessions:");
   for (const s of sessions) {
     console.log(`  ${s.sessionName} | model=${s.model} | cwd=${s.cwd} | updated=${s.updatedAt}`);
+  }
+}
+
+async function cmdSessionShow(opts, acpx) {
+  if (!opts.sessionName) fail("session show requires --name <name>");
+
+  // We need mode=session for readSessionRecord
+  opts.mode = "session";
+  const env = prepareInvocationEnv(opts);
+  const record = await readSessionRecord(acpx, opts, env);
+
+  if (!record) {
+    fail(`Session "${opts.sessionName}" not found or not readable.`);
+  }
+
+  if (!record.messages || record.messages.length === 0) {
+    console.log("(empty session — no messages)");
+    return;
+  }
+
+  // Parse messages into flat role/text pairs
+  const turns = record.messages.flatMap((m) => {
+    if (m?.User?.content) {
+      const text = m.User.content
+        .filter((i) => typeof i.Text === "string")
+        .map((i) => i.Text)
+        .join("\n")
+        .trim();
+      return text ? [{ role: "user", text }] : [];
+    }
+    if (m?.Agent?.content) {
+      const text = m.Agent.content
+        .filter((i) => typeof i.Text === "string")
+        .map((i) => i.Text)
+        .join("\n")
+        .trim();
+      return text ? [{ role: "assistant", text }] : [];
+    }
+    return [];
+  });
+
+  if (turns.length === 0) {
+    console.log("(session has messages but no readable text content)");
+    return;
+  }
+
+  // Apply --last filter
+  const display = opts.last && opts.last > 0 ? turns.slice(-opts.last) : turns;
+  const skipped = turns.length - display.length;
+
+  // Output header
+  const remembered = getRememberedSession(opts);
+  console.log(`# Session: ${opts.sessionName}`);
+  if (remembered) {
+    console.log(`- **Model**: ${remembered.model}`);
+    console.log(`- **CWD**: ${remembered.cwd}`);
+    console.log(`- **Updated**: ${remembered.updatedAt}`);
+  }
+  console.log(`- **Turns**: ${turns.length}`);
+  if (skipped > 0) {
+    console.log(`- _(showing last ${display.length}, skipped ${skipped})_`);
+  }
+  console.log("");
+
+  // Output conversation
+  for (const turn of display) {
+    if (turn.role === "user") {
+      console.log(`## 🧑 User\n`);
+    } else {
+      console.log(`## 🤖 Assistant\n`);
+    }
+    console.log(turn.text);
+    console.log("");
+    console.log("---");
+    console.log("");
   }
 }
 
@@ -632,12 +750,14 @@ async function main() {
     case "session":
       if (opts.subcommand === "list") {
         await cmdSessionList();
+      } else if (opts.subcommand === "show") {
+        await cmdSessionShow(opts, acpx);
       } else if (opts.subcommand === "start") {
         await cmdSessionStart(opts, acpx);
       } else if (opts.subcommand === "continue") {
         await cmdSessionContinue(opts, acpx);
       } else {
-        fail("Unknown session subcommand. Use: start, continue, list");
+        fail("Unknown session subcommand. Use: start, continue, show, list");
       }
       break;
 
@@ -649,7 +769,7 @@ async function main() {
 
 // ─── Exports (for testing) ───────────────────────────────────────────────────
 
-export { parseArgs, ensureEnv, classifyPromptState, scopeKey, stripQuotes, validateEnvValue, prepareInvocationEnv };
+export { parseArgs, ensureEnv, classifyPromptState, scopeKey, stripQuotes, validateEnvKey, validateEnvValue, prepareInvocationEnv };
 
 // Only run main() when executed directly (not when imported for testing)
 const isMainModule = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);

@@ -48,10 +48,6 @@ if [[ -z "$TIER" ]]; then
   TIER="$(get_yaml_value "$BOARD_YAML" "default_tier")"
 fi
 
-# Read and format ID
-NEXT_ID="$(get_yaml_value "$BOARD_YAML" "next_id")"
-ID="$(format_id "$NEXT_ID")"
-
 # Generate slug: lowercase, spaces to hyphens, strip non-alphanumeric except hyphens
 SLUG="$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | sed 's/[^a-z0-9-]//g')"
 
@@ -63,13 +59,30 @@ if [[ -z "$DESCRIPTION" ]]; then
   DESCRIPTION="暂无描述。"
 fi
 
-# ─── Create task file ────────────────────────────────────────────────────────
+# ─── Create task file (under flock to prevent ID race) ───────────────────────
 
 mkdir -p "$INBOX_DIR"
+LOCK_FILE="${BOARD_YAML}.lock"
 
-TASK_FILE="$INBOX_DIR/${ID}-${SLUG}.md"
+# Use flock to serialize ID allocation across concurrent processes.
+# The subshell writes the created file path to a temp file so we can read it back.
+RESULT_FILE="$(mktemp)"
+trap 'rm -f "$RESULT_FILE"' EXIT
 
-cat > "$TASK_FILE" << EOF
+(
+  flock -w 10 9 || { sc_fail "Failed to acquire board lock"; exit 1; }
+
+  # Read and format ID inside lock
+  NEXT_ID="$(get_yaml_value "$BOARD_YAML" "next_id")"
+  ID="$(format_id "$NEXT_ID")"
+  TASK_FILE="$INBOX_DIR/${ID}-${SLUG}.md"
+
+  if [[ -f "$TASK_FILE" ]]; then
+    sc_fail "Task file already exists: $TASK_FILE"
+    exit 1
+  fi
+
+  cat > "$TASK_FILE" << EOF
 ---
 id: "${ID}"
 slug: ${SLUG}
@@ -102,12 +115,19 @@ ${DESCRIPTION}
 | ${TS} | inbox | ${ASSIGNEE} | 创建任务 |
 EOF
 
-# ─── Increment next_id ──────────────────────────────────────────────────────
+  # Increment next_id inside lock
+  NEW_ID=$((NEXT_ID + 1))
+  set_yaml_value "$BOARD_YAML" "next_id" "$NEW_ID"
 
-NEW_ID=$((NEXT_ID + 1))
-set_yaml_value "$BOARD_YAML" "next_id" "$NEW_ID"
+  # Pass ID and file path back to parent
+  printf '%s\n%s' "$ID" "$TASK_FILE" > "$RESULT_FILE"
+
+) 9>"$LOCK_FILE"
 
 # ─── Output ──────────────────────────────────────────────────────────────────
+
+ID="$(sed -n '1p' "$RESULT_FILE")"
+TASK_FILE="$(sed -n '2p' "$RESULT_FILE")"
 
 sc_ok "Created task ${ID}: ${TITLE}"
 echo "$TASK_FILE"

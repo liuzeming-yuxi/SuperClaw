@@ -81,6 +81,25 @@ originally created through the wrapper can be continued (prevents model drift).
 node /root/cc-delegate/cc-delegate.mjs session list
 ```
 
+### Show session context
+
+View the full conversation history of a session in Markdown format:
+
+```bash
+node /root/cc-delegate/cc-delegate.mjs session show \
+  --name my-session \
+  --cwd /path/to/project
+```
+
+Show only the last N turns:
+
+```bash
+node /root/cc-delegate/cc-delegate.mjs session show \
+  --name my-session \
+  --cwd /path/to/project \
+  --last 5
+```
+
 ### Check status
 
 ```bash
@@ -112,6 +131,7 @@ For session workflows:
 | `--timeout <sec>` | (none) | Timeout in seconds |
 | `--name <name>` | (required for session) | Session name |
 | `--file <path>` | (none) | Read prompt from file instead of `--prompt` |
+| `--last <N>` | (all) | Show only last N turns (for `session show`) |
 
 ## Architecture
 

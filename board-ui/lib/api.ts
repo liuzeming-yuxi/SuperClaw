@@ -1,4 +1,4 @@
-const API_BASE = 'http://192.168.16.30:9876';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9876';
 
 export interface Project {
   id: string;

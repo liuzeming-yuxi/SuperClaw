@@ -14,8 +14,17 @@ FEISHU_ACCOUNT="${SUPERCLAW_FEISHU_ACCOUNT:-default}"
 FEISHU_TARGET="${SUPERCLAW_FEISHU_TARGET:-}"
 OPENCLAW_PATH="${SUPERCLAW_OPENCLAW_PATH:-openclaw}"
 STATE_DIR="${SUPERCLAW_STATE_DIR:-$HOME/.superclaw/state}"
+LOG_MAX_BYTES="${SUPERCLAW_LOG_MAX_BYTES:-10485760}"  # 10 MiB default
 
 mkdir -p "$STATE_DIR"
+
+# Rotate log if it exceeds size limit
+rotate_log() {
+  local logfile="$1"
+  if [[ -f "$logfile" ]] && [[ "$(stat -c%s "$logfile" 2>/dev/null || echo 0)" -gt "$LOG_MAX_BYTES" ]]; then
+    mv "$logfile" "${logfile}.1"
+  fi
+}
 
 # Read hook input from stdin
 HOOK_INPUT=$(cat)
@@ -43,6 +52,7 @@ case "$TOOL_NAME" in
     ;;
   *)
     # Non-Stop events: log only
+    rotate_log "$STATE_DIR/tool_log.jsonl"
     echo "{\"tool\":\"$TOOL_NAME\",\"session_id\":\"$SESSION_ID\",\"timestamp\":\"$TIMESTAMP\"}" \
       >> "$STATE_DIR/tool_log.jsonl"
     ;;

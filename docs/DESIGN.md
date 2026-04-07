@@ -855,16 +855,26 @@ fi
   "hooks": {
     "Stop": [
       {
-        "type": "command",
-        "command": "~/.superclaw/hooks/superclaw-notify.sh",
-        "timeout": 30
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.superclaw/hooks/superclaw-notify.sh",
+            "timeout": 30
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
-        "type": "command",
-        "command": "~/.superclaw/hooks/superclaw-progress.sh",
-        "timeout": 10
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.superclaw/hooks/superclaw-progress.sh",
+            "timeout": 10
+          }
+        ]
       }
     ]
   }

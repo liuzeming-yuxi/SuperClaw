@@ -88,11 +88,13 @@ else
   fail "Frontmatter tier: expected 'T2', got '$RESULT'"
 fi
 
+# Note: board-create.sh does not generate a priority field.
+# Priority is not part of the task schema; this test verifies it is absent.
 RESULT=$(get_frontmatter "$TASK_FILE" "priority")
-if [[ "$RESULT" == "medium" ]]; then
-  pass "Frontmatter priority defaults to medium from board.yaml"
+if [[ -z "$RESULT" ]]; then
+  pass "No priority field (not part of task schema)"
 else
-  fail "Frontmatter priority: expected 'medium', got '$RESULT'"
+  fail "Unexpected priority field found: '$RESULT'"
 fi
 
 # ─── Test 3: next_id incremented ───────────────────────────────────────────
@@ -120,13 +122,13 @@ fi
 
 echo "Test: History section"
 
-if grep -q "## History" "$TASK_FILE"; then
-  pass "History section present"
+if grep -q "## 历史" "$TASK_FILE"; then
+  pass "History section present (## 历史)"
 else
   fail "History section not found"
 fi
 
-if grep -q "| inbox | human | Created |" "$TASK_FILE"; then
+if grep -q "| inbox | human | 创建任务 |" "$TASK_FILE"; then
   pass "History row has correct phase/actor/note"
 else
   fail "History row not found or incorrect"
@@ -134,17 +136,10 @@ fi
 
 # ─── Test 6: Custom priority/tier override defaults ────────────────────────
 
-echo "Test: Custom priority and tier"
+echo "Test: Custom tier"
 
-bash "$BOARD_CREATE" --title "High priority spike" --priority critical --tier T0 >/dev/null 2>&1
+bash "$BOARD_CREATE" --title "High priority spike" --tier T0 >/dev/null 2>&1
 TASK_FILE2="$TMPDIR_TEST/project/.superclaw/board/inbox/002-high-priority-spike.md"
-
-RESULT=$(get_frontmatter "$TASK_FILE2" "priority")
-if [[ "$RESULT" == "critical" ]]; then
-  pass "Custom priority override works"
-else
-  fail "Custom priority: expected 'critical', got '$RESULT'"
-fi
 
 RESULT=$(get_frontmatter "$TASK_FILE2" "tier")
 if [[ "$RESULT" == "T0" ]]; then
@@ -166,8 +161,8 @@ else
   fail "Custom description not found"
 fi
 
-# Default description
-if grep -q "No description provided." "$TASK_FILE"; then
+# Default description (Chinese)
+if grep -q "暂无描述。" "$TASK_FILE"; then
   pass "Default description used when none given"
 else
   fail "Default description not found"

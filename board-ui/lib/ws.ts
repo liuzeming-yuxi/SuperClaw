@@ -1,4 +1,5 @@
-const WS_URL = 'ws://192.168.16.30:9876/ws';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9876';
+const WS_URL = API_BASE.replace(/^http/, 'ws') + '/ws';
 
 type MessageHandler = (msg: { type: string; data: unknown }) => void;
 

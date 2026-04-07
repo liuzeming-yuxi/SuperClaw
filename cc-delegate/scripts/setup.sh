@@ -60,7 +60,20 @@ if command -v claude &>/dev/null; then
   ok "Claude Code already installed (${CLAUDE_VERSION})"
 else
   info "Installing Claude Code..."
-  curl -fsSL https://claude.ai/install.sh | bash
+  INSTALLER="$(mktemp)"
+  trap 'rm -f "$INSTALLER"' EXIT
+  HTTP_CODE=$(curl -fsSL -w '%{http_code}' -o "$INSTALLER" https://claude.ai/install.sh)
+  if [[ "$HTTP_CODE" != "200" ]] || [[ ! -s "$INSTALLER" ]]; then
+    rm -f "$INSTALLER"
+    fail "Failed to download Claude Code installer (HTTP ${HTTP_CODE})"
+  fi
+  # Sanity check: installer should be a shell script
+  if ! head -1 "$INSTALLER" | grep -qE '^#!/'; then
+    rm -f "$INSTALLER"
+    fail "Downloaded installer does not look like a shell script — aborting"
+  fi
+  bash "$INSTALLER"
+  rm -f "$INSTALLER"
   ok "Claude Code installed"
 fi
 

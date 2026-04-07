@@ -53,7 +53,7 @@ get_frontmatter() {
   printf '%s' "$value"
 }
 
-# set_frontmatter(file, key, value) — update value in frontmatter
+# set_frontmatter(file, key, value) — update or insert value in frontmatter
 set_frontmatter() {
   local file="$1" key="$2" value="$3"
   local tmpfile
@@ -65,6 +65,11 @@ set_frontmatter() {
   while IFS= read -r line; do
     if [[ "$line" == "---" ]]; then
       if $in_frontmatter; then
+        # Closing delimiter — insert key here if not found yet
+        if ! $found; then
+          echo "${key}: ${value}" >> "$tmpfile"
+          found=true
+        fi
         in_frontmatter=false
         echo "$line" >> "$tmpfile"
         continue
@@ -109,9 +114,26 @@ get_yaml_value() {
 }
 
 # set_yaml_value(file, key, value) — update value in plain YAML file
+# Uses line-by-line rewrite instead of sed to avoid delimiter/regex issues.
 set_yaml_value() {
   local file="$1" key="$2" value="$3"
-  sed -i "s|^${key}:.*|${key}: ${value}|" "$file"
+  local tmpfile found=false
+  tmpfile=$(mktemp)
+
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^${key}: ]]; then
+      echo "${key}: ${value}" >> "$tmpfile"
+      found=true
+    else
+      echo "$line" >> "$tmpfile"
+    fi
+  done < "$file"
+
+  if ! $found; then
+    echo "${key}: ${value}" >> "$tmpfile"
+  fi
+
+  mv "$tmpfile" "$file"
 }
 
 # ─── Utility helpers ────────────────────────────────────────────────────────
