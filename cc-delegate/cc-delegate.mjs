@@ -68,30 +68,28 @@ function validateEnvValue(key, val) {
 // ─── .env loader ─────────────────────────────────────────────────────────────
 
 function ensureEnv() {
+  // Always load .env (not just when required vars are missing) so that
+  // SUPERCLAW_* and other optional vars are available to child processes.
+  if (existsSync(ENV_FILE)) {
+    readFileSync(ENV_FILE, "utf8")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith("#") && l.includes("="))
+      .forEach((l) => {
+        const idx = l.indexOf("=");
+        const key = l.slice(0, idx).trim();
+        const val = stripQuotes(l.slice(idx + 1));
+        validateEnvKey(key);
+        validateEnvValue(key, val);
+        if (!process.env[key]) {
+          process.env[key] = val;
+        }
+      });
+  }
   const required = ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"];
-  const missing = required.filter((k) => !process.env[k]);
-  if (missing.length > 0) {
-    // Try loading from .env directly
-    if (existsSync(ENV_FILE)) {
-      readFileSync(ENV_FILE, "utf8")
-        .split("\n")
-        .map((l) => l.trim())
-        .filter((l) => l && !l.startsWith("#") && l.includes("="))
-        .forEach((l) => {
-          const idx = l.indexOf("=");
-          const key = l.slice(0, idx).trim();
-          const val = stripQuotes(l.slice(idx + 1));
-          validateEnvKey(key);
-          validateEnvValue(key, val);
-          if (!process.env[key]) {
-            process.env[key] = val;
-          }
-        });
-    }
-    const stillMissing = required.filter((k) => !process.env[k]);
-    if (stillMissing.length > 0) {
-      fail(`Missing env vars: ${stillMissing.join(", ")}. Check ${ENV_FILE}`);
-    }
+  const stillMissing = required.filter((k) => !process.env[k]);
+  if (stillMissing.length > 0) {
+    fail(`Missing env vars: ${stillMissing.join(", ")}. Check ${ENV_FILE}`);
   }
 }
 
