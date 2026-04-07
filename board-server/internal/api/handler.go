@@ -13,33 +13,33 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/superclaw/board-server/internal/board"
+	"github.com/superclaw/board-server/internal/chat"
 	"github.com/superclaw/board-server/internal/config"
-	"github.com/superclaw/board-server/internal/pipeline"
 	"github.com/superclaw/board-server/internal/ws"
 )
 
 type Handler struct {
-	SCRoot         string
-	Hub            *ws.Hub
-	PipelineConfig pipeline.PipelineConfig
+	SCRoot     string
+	Hub        *ws.Hub
+	ChatConfig chat.Config
 
-	pipelineMu sync.Mutex
-	pipelines  map[string]*pipeline.Pipeline // projectPath -> pipeline
+	chatMu   sync.Mutex
+	managers map[string]*chat.Manager // projectPath -> Manager
 }
 
-// getPipeline returns or creates a pipeline for a project.
-func (h *Handler) getPipeline(proj *config.Project) *pipeline.Pipeline {
-	h.pipelineMu.Lock()
-	defer h.pipelineMu.Unlock()
-	if h.pipelines == nil {
-		h.pipelines = make(map[string]*pipeline.Pipeline)
+// getChatManager returns or creates a chat manager for a project.
+func (h *Handler) getChatManager(proj *config.Project) *chat.Manager {
+	h.chatMu.Lock()
+	defer h.chatMu.Unlock()
+	if h.managers == nil {
+		h.managers = make(map[string]*chat.Manager)
 	}
-	if p, ok := h.pipelines[proj.Path]; ok {
-		return p
+	if m, ok := h.managers[proj.Path]; ok {
+		return m
 	}
-	p := pipeline.New(proj.Path, h.Hub, h.PipelineConfig)
-	h.pipelines[proj.Path] = p
-	return p
+	m := chat.NewManager(proj.Path, h.Hub, h.ChatConfig)
+	h.managers[proj.Path] = m
+	return m
 }
 
 func (h *Handler) findProject(id string) (*config.Project, error) {
@@ -626,9 +626,9 @@ func (h *Handler) BrowseFilesystem(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// POST /api/projects/{projectId}/tasks/{taskId}/trigger
-// Actively trigger a pipeline action on a task.
-func (h *Handler) TriggerTask(w http.ResponseWriter, r *http.Request) {
+// POST /api/projects/{projectId}/tasks/{taskId}/chat/send
+// Send a user message and stream back the assistant reply via SSE.
+func (h *Handler) ChatSend(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
 	taskID := chi.URLParam(r, "taskId")
 
@@ -643,77 +643,123 @@ func (h *Handler) TriggerTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Action string `json:"action"`
+		Content string `json:"content"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, 400, "invalid json")
 		return
 	}
-	if body.Action == "" {
-		writeError(w, 400, "action is required")
+	if body.Content == "" {
+		writeError(w, 400, "content is required")
 		return
 	}
 
-	p := h.getPipeline(proj)
-	if err := p.TriggerTask(r.Context(), taskID, body.Action); err != nil {
+	// Set SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, 500, "streaming not supported")
+		return
+	}
+
+	mgr := h.getChatManager(proj)
+
+	onChunk := func(text string) {
+		data, _ := json.Marshal(map[string]string{"content": text})
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		flusher.Flush()
+	}
+
+	_, err = mgr.SendMessage(r.Context(), taskID, body.Content, onChunk)
+	if err != nil {
+		errData, _ := json.Marshal(map[string]string{"error": err.Error()})
+		fmt.Fprintf(w, "data: %s\n\n", errData)
+		flusher.Flush()
+	}
+
+	fmt.Fprintf(w, "data: [DONE]\n\n")
+	flusher.Flush()
+}
+
+// GET /api/projects/{projectId}/tasks/{taskId}/chat/history
+// Get chat message history and session state.
+func (h *Handler) ChatHistory(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	taskID := chi.URLParam(r, "taskId")
+
+	proj, err := h.findProject(projectID)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	if proj == nil {
+		writeError(w, 404, "project not found")
+		return
+	}
+
+	mgr := h.getChatManager(proj)
+	messages, err := mgr.GetHistory(taskID)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	if messages == nil {
+		messages = []chat.Message{}
+	}
+
+	session := mgr.GetSession(taskID)
+	var sessionData interface{}
+	if session != nil {
+		sessionData = map[string]string{
+			"phase":   session.Phase,
+			"backend": session.Backend,
+		}
+	} else {
+		sessionData = map[string]string{
+			"phase":   "align",
+			"backend": "openclaw",
+		}
+	}
+
+	writeJSON(w, 200, map[string]interface{}{
+		"messages": messages,
+		"session":  sessionData,
+	})
+}
+
+// POST /api/projects/{projectId}/tasks/{taskId}/chat/switch
+// Switch the chat backend for a task.
+func (h *Handler) ChatSwitch(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	taskID := chi.URLParam(r, "taskId")
+
+	proj, err := h.findProject(projectID)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	if proj == nil {
+		writeError(w, 404, "project not found")
+		return
+	}
+
+	var body struct {
+		Backend string `json:"backend"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, 400, "invalid json")
+		return
+	}
+
+	mgr := h.getChatManager(proj)
+	if err := mgr.SwitchBackend(taskID, body.Backend); err != nil {
 		writeError(w, 400, err.Error())
 		return
 	}
 
-	writeJSON(w, 200, map[string]string{
-		"status":  "ok",
-		"task_id": taskID,
-		"action":  body.Action,
-	})
-}
-
-// POST /api/projects/{projectId}/pipeline/process
-// Process all inbox tasks (batch trigger).
-func (h *Handler) ProcessPipeline(w http.ResponseWriter, r *http.Request) {
-	projectID := chi.URLParam(r, "projectId")
-
-	proj, err := h.findProject(projectID)
-	if err != nil {
-		writeError(w, 500, err.Error())
-		return
-	}
-	if proj == nil {
-		writeError(w, 404, "project not found")
-		return
-	}
-
-	p := h.getPipeline(proj)
-	processed, err := p.ProcessInbox(r.Context())
-	if err != nil {
-		writeError(w, 500, err.Error())
-		return
-	}
-
-	writeJSON(w, 200, map[string]interface{}{
-		"status":    "ok",
-		"processed": processed,
-	})
-}
-
-// GET /api/projects/{projectId}/pipeline/status
-// Get pipeline status for all running/recent tasks.
-func (h *Handler) PipelineStatus(w http.ResponseWriter, r *http.Request) {
-	projectID := chi.URLParam(r, "projectId")
-
-	proj, err := h.findProject(projectID)
-	if err != nil {
-		writeError(w, 500, err.Error())
-		return
-	}
-	if proj == nil {
-		writeError(w, 404, "project not found")
-		return
-	}
-
-	p := h.getPipeline(proj)
-	status := p.GetStatus()
-
-	writeJSON(w, 200, map[string]interface{}{
-		"running": status,
-	})
+	writeJSON(w, 200, map[string]string{"ok": "true"})
 }

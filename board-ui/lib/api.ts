@@ -210,42 +210,107 @@ export async function renameFilesystem(oldPath: string, newName: string): Promis
   return res.json();
 }
 
-// Pipeline API
+// Chat API
 
-export interface PipelineTaskStatus {
-  task_id: string;
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
   phase: string;
-  action: string;
-  status: string;
-  session_id: string;
-  started_at: string;
-  error?: string;
 }
 
-export async function triggerTask(projectId: string, taskId: string, action: string): Promise<{ status: string; task_id: string; action: string }> {
-  const res = await fetch(`${API_BASE}/api/projects/${projectId}/tasks/${taskId}/trigger`, {
+export interface ChatSession {
+  phase: string;
+  backend: string;
+}
+
+export interface ChatHistoryResponse {
+  messages: ChatMessage[];
+  session: ChatSession;
+}
+
+export async function fetchChatHistory(projectId: string, taskId: string): Promise<ChatHistoryResponse> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/tasks/${taskId}/chat/history`);
+  if (!res.ok) throw new Error('Failed to fetch chat history');
+  return res.json();
+}
+
+export function sendChatMessage(
+  projectId: string,
+  taskId: string,
+  content: string,
+  onChunk: (text: string) => void,
+  onDone: () => void,
+  onError: (err: string) => void,
+): AbortController {
+  const controller = new AbortController();
+
+  fetch(`${API_BASE}/api/projects/${projectId}/tasks/${taskId}/chat/send`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action }),
+    body: JSON.stringify({ content }),
+    signal: controller.signal,
+  }).then(async (res) => {
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'unknown error' }));
+      onError(err.error || '发送失败');
+      return;
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) {
+      onError('无法读取流');
+      return;
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6);
+        if (data === '[DONE]') {
+          onDone();
+          return;
+        }
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.content) {
+            onChunk(parsed.content);
+          }
+          if (parsed.error) {
+            onError(parsed.error);
+            return;
+          }
+        } catch {
+          // skip parse errors
+        }
+      }
+    }
+    onDone();
+  }).catch((err) => {
+    if (err.name !== 'AbortError') {
+      onError(err.message || '网络错误');
+    }
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'unknown error' }));
-    throw new Error(err.error || 'Failed to trigger task');
-  }
-  return res.json();
+
+  return controller;
 }
 
-export async function processPipeline(projectId: string): Promise<{ status: string; processed: string[] }> {
-  const res = await fetch(`${API_BASE}/api/projects/${projectId}/pipeline/process`, {
+export async function switchChatBackend(projectId: string, taskId: string, backend: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/tasks/${taskId}/chat/switch`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ backend }),
   });
-  if (!res.ok) throw new Error('Failed to process pipeline');
-  return res.json();
-}
-
-export async function fetchPipelineStatus(projectId: string): Promise<{ running: Record<string, PipelineTaskStatus> }> {
-  const res = await fetch(`${API_BASE}/api/projects/${projectId}/pipeline/status`);
-  if (!res.ok) throw new Error('Failed to fetch pipeline status');
-  return res.json();
+  if (!res.ok) throw new Error('Failed to switch backend');
 }

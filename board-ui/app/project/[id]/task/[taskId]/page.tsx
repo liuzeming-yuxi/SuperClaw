@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { fetchTask, fetchSessions, triggerTask, fetchPipelineStatus, Task, TaskSession, PipelineTaskStatus } from '@/lib/api';
+import {
+  fetchTask, fetchSessions, fetchChatHistory, sendChatMessage, switchChatBackend,
+  Task, TaskSession, ChatMessage, ChatSession,
+} from '@/lib/api';
 import { subscribe } from '@/lib/ws';
 
 const PHASE_LABELS: Record<string, string> = {
@@ -15,17 +18,13 @@ const PHASE_COLORS: Record<string, string> = {
   executing: '#f59e0b', reviewing: '#22c55e', done: '#10b981', blocked: '#ef4444',
 };
 
-// Actions available for each phase
-const PHASE_ACTIONS: Record<string, { action: string; label: string; color: string }[]> = {
-  inbox: [{ action: 'start_align', label: '开始对齐', color: '#8b5cf6' }],
-  aligning: [{ action: 'approve_spec', label: '确认规格', color: '#3b82f6' }],
-  planned: [{ action: 'dispatch', label: '开始执行', color: '#f59e0b' }],
-  executing: [{ action: 'verify', label: '触发验收', color: '#22c55e' }],
-  reviewing: [
-    { action: 'approve', label: '通过验收', color: '#10b981' },
-    { action: 'verify', label: '重新验收', color: '#f59e0b' },
-  ],
-};
+const CHAT_PHASES = [
+  { key: 'align', label: '对齐' },
+  { key: 'plan', label: '规划' },
+  { key: 'execute', label: '执行' },
+  { key: 'verify', label: '验收' },
+  { key: 'deliver', label: '交付' },
+];
 
 const IconBack = () => (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -40,9 +39,9 @@ const IconFile = () => (
   </svg>
 );
 
-const IconPlay = () => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-    <path d="M4 2.5v11l9-5.5z"/>
+const IconSend = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+    <path d="M1.5 1.3l13 6.7-13 6.7V9.2L9.5 8 1.5 6.8z"/>
   </svg>
 );
 
@@ -51,12 +50,6 @@ const IconSpinner = () => (
     <path d="M8 1a7 7 0 106.93 6"/>
   </svg>
 );
-
-const ACTION_LABELS: Record<string, string> = {
-  generating_plan: '正在生成计划...',
-  executing_code: '正在执行代码...',
-  verifying: '正在验收...',
-};
 
 export default function TaskDetailPage() {
   const params = useParams();
@@ -67,9 +60,16 @@ export default function TaskDetailPage() {
   const [task, setTask] = useState<Task | null>(null);
   const [sessions, setSessions] = useState<TaskSession[]>([]);
   const [loading, setLoading] = useState(true);
-  const [triggering, setTriggering] = useState(false);
-  const [triggerError, setTriggerError] = useState<string | null>(null);
-  const [pipelineStatus, setPipelineStatus] = useState<PipelineTaskStatus | null>(null);
+
+  // Chat state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatSession, setChatSession] = useState<ChatSession>({ phase: 'align', backend: 'openclaw' });
+  const [inputValue, setInputValue] = useState('');
+  const [streaming, setStreaming] = useState(false);
+  const [streamingContent, setStreamingContent] = useState('');
+  const [chatError, setChatError] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const reload = useCallback(() => {
     Promise.all([
@@ -79,46 +79,109 @@ export default function TaskDetailPage() {
       setTask(t);
       setSessions(s || []);
     }).catch(console.error);
+  }, [projectId, taskId]);
 
-    fetchPipelineStatus(projectId).then((ps) => {
-      setPipelineStatus(ps.running[taskId] || null);
-    }).catch(() => {});
+  const loadChatHistory = useCallback(() => {
+    fetchChatHistory(projectId, taskId).then((res) => {
+      setChatMessages(res.messages || []);
+      setChatSession(res.session);
+    }).catch(console.error);
   }, [projectId, taskId]);
 
   useEffect(() => {
     reload();
+    loadChatHistory();
     setLoading(false);
-  }, [reload]);
+  }, [reload, loadChatHistory]);
 
   // Subscribe to WebSocket for real-time updates
   useEffect(() => {
     const unsub = subscribe((msg) => {
-      if (msg.type === 'pipeline_phase_changed' ||
-          msg.type === 'pipeline_action_started' ||
-          msg.type === 'pipeline_action_completed' ||
-          msg.type === 'task_moved' ||
-          msg.type === 'task_updated' ||
-          msg.type === 'session_created' ||
-          msg.type === 'session_updated' ||
+      if (msg.type === 'task_moved' || msg.type === 'task_updated' ||
+          msg.type === 'session_created' || msg.type === 'session_updated' ||
           msg.type === 'artifact_updated') {
-        // Reload task data on pipeline events
         reload();
+      }
+      // Handle chat events from other clients
+      const data = msg.data as Record<string, string>;
+      if (data?.task_id !== taskId) return;
+      if (msg.type === 'chat_phase_changed') {
+        setChatSession((prev) => ({ ...prev, phase: data.to }));
       }
     });
     return unsub;
-  }, [reload]);
+  }, [reload, taskId]);
 
-  const handleTrigger = async (action: string) => {
-    setTriggering(true);
-    setTriggerError(null);
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages, streamingContent]);
+
+  const handleSend = () => {
+    if (!inputValue.trim() || streaming) return;
+
+    const content = inputValue.trim();
+    setInputValue('');
+    setChatError(null);
+    setStreaming(true);
+    setStreamingContent('');
+
+    // Optimistically add user message
+    const userMsg: ChatMessage = {
+      id: `temp-${Date.now()}`,
+      role: 'user',
+      content,
+      timestamp: new Date().toISOString(),
+      phase: chatSession.phase,
+    };
+    setChatMessages((prev) => [...prev, userMsg]);
+
+    let accumulated = '';
+
+    abortRef.current = sendChatMessage(
+      projectId,
+      taskId,
+      content,
+      (chunk) => {
+        accumulated += chunk;
+        setStreamingContent(accumulated);
+      },
+      () => {
+        // On done - add assistant message
+        const assistantMsg: ChatMessage = {
+          id: `temp-${Date.now()}-reply`,
+          role: 'assistant',
+          content: accumulated,
+          timestamp: new Date().toISOString(),
+          phase: chatSession.phase,
+        };
+        setChatMessages((prev) => [...prev, assistantMsg]);
+        setStreamingContent('');
+        setStreaming(false);
+        abortRef.current = null;
+      },
+      (err) => {
+        setChatError(err);
+        setStreamingContent('');
+        setStreaming(false);
+        abortRef.current = null;
+      },
+    );
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const handleBackendSwitch = async (backend: string) => {
     try {
-      await triggerTask(projectId, taskId, action);
-      // Reload after trigger
-      setTimeout(reload, 500);
-    } catch (err) {
-      setTriggerError(err instanceof Error ? err.message : '操作失败');
-    } finally {
-      setTriggering(false);
+      await switchChatBackend(projectId, taskId, backend);
+      setChatSession((prev) => ({ ...prev, backend }));
+    } catch {
+      setChatError('切换后端失败');
     }
   };
 
@@ -142,11 +205,9 @@ export default function TaskDetailPage() {
   }
 
   const taskSessions = sessions.filter((s) => s.task_id === task.id);
-  const actions = PHASE_ACTIONS[task.phase] || [];
-  const isRunning = pipelineStatus?.status === 'running';
 
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto', padding: '32px 24px' }}>
+    <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px' }}>
       {/* Spinner keyframes */}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
@@ -154,16 +215,9 @@ export default function TaskDetailPage() {
       <button
         onClick={() => router.push(`/project/${projectId}`)}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          background: 'none',
-          border: 'none',
-          color: 'var(--accent)',
-          fontSize: 13,
-          marginBottom: 20,
-          cursor: 'pointer',
-          padding: '4px 0',
+          display: 'flex', alignItems: 'center', gap: 6,
+          background: 'none', border: 'none', color: 'var(--accent)',
+          fontSize: 13, marginBottom: 20, cursor: 'pointer', padding: '4px 0',
           transition: 'color var(--transition-fast)',
         }}
         onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent-hover)'; }}
@@ -178,20 +232,12 @@ export default function TaskDetailPage() {
           <span style={{ fontFamily: 'monospace', color: 'var(--text-muted)', fontSize: 14 }}>#{task.id}</span>
           {task.tier && <span className={`tier-badge tier-${task.tier}`}>{task.tier}</span>}
           <span style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 5,
-            padding: '2px 10px',
-            borderRadius: 10,
-            fontSize: 11,
-            fontWeight: 500,
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '2px 10px', borderRadius: 10, fontSize: 11, fontWeight: 500,
             background: `${PHASE_COLORS[task.phase] || '#6b7280'}18`,
             color: PHASE_COLORS[task.phase] || '#6b7280',
           }}>
-            <div style={{
-              width: 6, height: 6, borderRadius: '50%',
-              background: PHASE_COLORS[task.phase] || '#6b7280',
-            }} />
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: PHASE_COLORS[task.phase] || '#6b7280' }} />
             {PHASE_LABELS[task.phase] || task.phase}
           </span>
         </div>
@@ -200,117 +246,10 @@ export default function TaskDetailPage() {
         </h1>
       </div>
 
-      {/* Pipeline Controls */}
-      {(actions.length > 0 || isRunning) && (
-        <div style={{
-          marginBottom: 24,
-          padding: '16px 20px',
-          background: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-md)',
-        }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text-secondary)' }}>
-            流水线操作
-          </div>
-
-          {/* Running status */}
-          {isRunning && pipelineStatus && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '10px 14px',
-              background: '#f59e0b12',
-              border: '1px solid #f59e0b30',
-              borderRadius: 'var(--radius-sm)',
-              marginBottom: 12,
-              fontSize: 13,
-              color: '#f59e0b',
-            }}>
-              <IconSpinner />
-              <span>{ACTION_LABELS[pipelineStatus.action] || pipelineStatus.action}</span>
-              {pipelineStatus.session_id && (
-                <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)' }}>
-                  会话: {pipelineStatus.session_id}
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Error display */}
-          {(triggerError || (pipelineStatus?.status === 'failed' && pipelineStatus?.error)) && (
-            <div style={{
-              padding: '10px 14px',
-              background: '#ef444412',
-              border: '1px solid #ef444430',
-              borderRadius: 'var(--radius-sm)',
-              marginBottom: 12,
-              fontSize: 12,
-              color: '#ef4444',
-            }}>
-              {triggerError || pipelineStatus?.error}
-            </div>
-          )}
-
-          {/* Completed status */}
-          {pipelineStatus?.status === 'completed' && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '10px 14px',
-              background: '#10b98112',
-              border: '1px solid #10b98130',
-              borderRadius: 'var(--radius-sm)',
-              marginBottom: 12,
-              fontSize: 13,
-              color: '#10b981',
-            }}>
-              <span>&#10003;</span>
-              <span>{ACTION_LABELS[pipelineStatus.action]?.replace('正在', '').replace('...', '完成') || '操作完成'}</span>
-            </div>
-          )}
-
-          {/* Action buttons */}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {actions.map(({ action, label, color }) => (
-              <button
-                key={action}
-                onClick={() => handleTrigger(action)}
-                disabled={triggering || isRunning}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '8px 16px',
-                  background: (triggering || isRunning) ? 'var(--bg-hover)' : color,
-                  color: (triggering || isRunning) ? 'var(--text-muted)' : '#fff',
-                  border: 'none',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: 13,
-                  fontWeight: 500,
-                  cursor: (triggering || isRunning) ? 'not-allowed' : 'pointer',
-                  transition: 'opacity var(--transition-fast)',
-                  opacity: (triggering || isRunning) ? 0.6 : 1,
-                }}
-              >
-                {triggering ? <IconSpinner /> : <IconPlay />}
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Meta grid */}
       <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: 1,
-        marginBottom: 24,
-        background: 'var(--border)',
-        borderRadius: 'var(--radius-md)',
-        overflow: 'hidden',
+        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, marginBottom: 24,
+        background: 'var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden',
       }}>
         {[
           ['类型', task.type || '-'],
@@ -328,11 +267,8 @@ export default function TaskDetailPage() {
       {/* Blocked reason */}
       {task.blocked_reason && (
         <div style={{
-          padding: '12px 16px',
-          background: 'var(--danger-bg)',
-          borderRadius: 'var(--radius-md)',
-          border: '1px solid rgba(239, 68, 68, 0.2)',
-          marginBottom: 24,
+          padding: '12px 16px', background: 'var(--danger-bg)', borderRadius: 'var(--radius-md)',
+          border: '1px solid rgba(239, 68, 68, 0.2)', marginBottom: 24,
         }}>
           <div style={{ fontSize: 11, color: 'var(--danger)', fontWeight: 600, marginBottom: 4 }}>阻塞原因</div>
           <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{task.blocked_reason}</div>
@@ -344,14 +280,9 @@ export default function TaskDetailPage() {
         <div style={{ marginBottom: 24 }}>
           <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>详细内容</h2>
           <pre style={{
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)',
-            padding: 16,
-            fontSize: 13,
-            whiteSpace: 'pre-wrap',
-            color: 'var(--text-secondary)',
-            lineHeight: 1.65,
+            background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)', padding: 16, fontSize: 13,
+            whiteSpace: 'pre-wrap', color: 'var(--text-secondary)', lineHeight: 1.65,
           }}>
             {task.body}
           </pre>
@@ -385,6 +316,165 @@ export default function TaskDetailPage() {
         </div>
       )}
 
+      {/* Chat Panel */}
+      <div style={{
+        marginBottom: 24, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+        overflow: 'hidden', background: 'var(--bg-primary)',
+      }}>
+        {/* Phase indicator */}
+        <div style={{
+          display: 'flex', gap: 0, borderBottom: '1px solid var(--border)',
+          background: 'var(--bg-secondary)', overflow: 'hidden',
+        }}>
+          {CHAT_PHASES.map((p) => (
+            <div key={p.key} style={{
+              flex: 1, padding: '10px 8px', textAlign: 'center', fontSize: 12, fontWeight: 500,
+              background: chatSession.phase === p.key ? 'var(--accent)' : 'transparent',
+              color: chatSession.phase === p.key ? '#fff' : 'var(--text-muted)',
+              transition: 'all 0.2s',
+            }}>
+              {p.label}
+            </div>
+          ))}
+        </div>
+
+        {/* Message list */}
+        <div style={{
+          height: 420, overflowY: 'auto', padding: '16px 20px',
+          display: 'flex', flexDirection: 'column', gap: 12,
+        }}>
+          {chatMessages.length === 0 && !streaming && (
+            <div style={{
+              textAlign: 'center', color: 'var(--text-muted)', fontSize: 13,
+              padding: '60px 20px',
+            }}>
+              <div style={{ fontSize: 28, marginBottom: 12, opacity: 0.4 }}>💬</div>
+              <div>开始与 Agent 对话</div>
+              <div style={{ fontSize: 11, marginTop: 4 }}>发送消息开始对齐需求</div>
+            </div>
+          )}
+
+          {chatMessages.map((msg) => (
+            <div key={msg.id} style={{
+              display: 'flex', flexDirection: 'column',
+              alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
+            }}>
+              <div style={{
+                fontSize: 10, color: 'var(--text-muted)', marginBottom: 3,
+                fontWeight: 500,
+              }}>
+                {msg.role === 'user' ? '你' : msg.role === 'system' ? '系统' : 'Agent'}
+              </div>
+              <div style={{
+                maxWidth: '80%', padding: '10px 14px', borderRadius: 12,
+                fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap',
+                background: msg.role === 'user' ? 'var(--accent)' : 'var(--bg-secondary)',
+                color: msg.role === 'user' ? '#fff' : 'var(--text-primary)',
+                border: msg.role === 'user' ? 'none' : '1px solid var(--border)',
+              }}>
+                {msg.content}
+              </div>
+            </div>
+          ))}
+
+          {/* Streaming message */}
+          {streaming && streamingContent && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 3, fontWeight: 500 }}>
+                Agent
+              </div>
+              <div style={{
+                maxWidth: '80%', padding: '10px 14px', borderRadius: 12,
+                fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap',
+                background: 'var(--bg-secondary)', color: 'var(--text-primary)',
+                border: '1px solid var(--border)',
+              }}>
+                {streamingContent}
+                <span style={{ display: 'inline-block', width: 6, height: 14, background: 'var(--accent)', marginLeft: 2, animation: 'blink 1s step-end infinite' }} />
+              </div>
+            </div>
+          )}
+
+          {/* Streaming indicator with no content yet */}
+          {streaming && !streamingContent && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)', fontSize: 12 }}>
+              <IconSpinner /> Agent 正在思考...
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Error display */}
+        {chatError && (
+          <div style={{
+            padding: '8px 20px', background: '#ef444412', borderTop: '1px solid #ef444430',
+            fontSize: 12, color: '#ef4444',
+          }}>
+            {chatError}
+          </div>
+        )}
+
+        {/* Input area */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '12px 16px', borderTop: '1px solid var(--border)',
+          background: 'var(--bg-secondary)',
+        }}>
+          {/* Backend switcher */}
+          <select
+            value={chatSession.backend}
+            onChange={(e) => handleBackendSwitch(e.target.value)}
+            disabled={streaming}
+            style={{
+              padding: '6px 10px', borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border)', background: 'var(--bg-primary)',
+              color: 'var(--text-primary)', fontSize: 12, cursor: 'pointer',
+              outline: 'none',
+            }}
+          >
+            <option value="openclaw">OpenClaw</option>
+            <option value="cc-direct">CC 直连</option>
+          </select>
+
+          {/* Input */}
+          <textarea
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={streaming}
+            placeholder="输入消息...（Enter 发送，Shift+Enter 换行）"
+            rows={1}
+            style={{
+              flex: 1, padding: '8px 12px', borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border)', background: 'var(--bg-primary)',
+              color: 'var(--text-primary)', fontSize: 13, resize: 'none',
+              outline: 'none', fontFamily: 'inherit', lineHeight: 1.5,
+              minHeight: 36, maxHeight: 100,
+            }}
+          />
+
+          {/* Send button */}
+          <button
+            onClick={handleSend}
+            disabled={!inputValue.trim() || streaming}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 36, height: 36, borderRadius: 'var(--radius-sm)',
+              border: 'none', cursor: (!inputValue.trim() || streaming) ? 'not-allowed' : 'pointer',
+              background: (!inputValue.trim() || streaming) ? 'var(--bg-hover)' : 'var(--accent)',
+              color: (!inputValue.trim() || streaming) ? 'var(--text-muted)' : '#fff',
+              transition: 'all 0.2s', flexShrink: 0,
+            }}
+          >
+            {streaming ? <IconSpinner /> : <IconSend />}
+          </button>
+        </div>
+      </div>
+
+      {/* Blink keyframe for cursor */}
+      <style>{`@keyframes blink { 50% { opacity: 0; } }`}</style>
+
       {/* Sessions */}
       <div>
         <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>
@@ -392,12 +482,9 @@ export default function TaskDetailPage() {
         </h2>
         {taskSessions.length === 0 ? (
           <div style={{
-            textAlign: 'center',
-            padding: '32px 20px',
-            background: 'var(--bg-secondary)',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--border)',
-            color: 'var(--text-muted)',
+            textAlign: 'center', padding: '32px 20px',
+            background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border)', color: 'var(--text-muted)',
           }}>
             <div style={{ fontSize: 13, marginBottom: 4 }}>暂无关联会话</div>
             <div style={{ fontSize: 11 }}>Agent 开始处理后会话将在此显示</div>
@@ -406,13 +493,9 @@ export default function TaskDetailPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {taskSessions.map((s) => (
               <div key={s.id} style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '10px 14px',
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)',
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 14px', background: 'var(--bg-secondary)',
+                border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
               }}>
                 <div style={{
                   width: 7, height: 7, borderRadius: '50%',

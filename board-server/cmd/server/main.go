@@ -12,7 +12,7 @@ import (
 	"github.com/go-chi/cors"
 
 	"github.com/superclaw/board-server/internal/api"
-	"github.com/superclaw/board-server/internal/pipeline"
+	"github.com/superclaw/board-server/internal/chat"
 	"github.com/superclaw/board-server/internal/ws"
 )
 
@@ -31,10 +31,10 @@ func main() {
 	handler := &api.Handler{
 		SCRoot: scRoot,
 		Hub:    hub,
-		PipelineConfig: pipeline.PipelineConfig{
-			MaxConcurrent: 2,
-			ACPXPath:      "/root/.nvm/versions/node/v22.22.0/bin/acpx",
-			EnvFile:       "/home/testclaude/cc-delegate/.env",
+		ChatConfig: chat.Config{
+			OpenClawBaseURL: "http://127.0.0.1:18789",
+			OpenClawToken:   "130b9e35e8c7e52b3992253f54047d4726ec60c4d23c5ab1",
+			CCDelegatePath:  "/root/cc-delegate/cc-delegate.mjs",
 		},
 	}
 
@@ -66,10 +66,10 @@ func main() {
 	r.Post("/api/filesystem/mkdir", handler.MkdirFilesystem)
 	r.Post("/api/filesystem/rename", handler.RenameFilesystem)
 
-	// Pipeline routes
-	r.Post("/api/projects/{projectId}/tasks/{taskId}/trigger", handler.TriggerTask)
-	r.Post("/api/projects/{projectId}/pipeline/process", handler.ProcessPipeline)
-	r.Get("/api/projects/{projectId}/pipeline/status", handler.PipelineStatus)
+	// Chat routes
+	r.Post("/api/projects/{projectId}/tasks/{taskId}/chat/send", handler.ChatSend)
+	r.Get("/api/projects/{projectId}/tasks/{taskId}/chat/history", handler.ChatHistory)
+	r.Post("/api/projects/{projectId}/tasks/{taskId}/chat/switch", handler.ChatSwitch)
 
 	// WebSocket
 	r.Get("/ws", hub.HandleWS)
