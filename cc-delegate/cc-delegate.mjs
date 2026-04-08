@@ -562,12 +562,21 @@ async function cmdStatus(acpx) {
   console.log("");
 }
 
-async function cmdSessionList() {
+async function cmdSessionList(opts) {
   const manifest = readManifest();
-  const sessions = Object.values(manifest.sessions);
+  let sessions = Object.values(manifest.sessions);
   if (sessions.length === 0) {
     console.log("No tracked sessions.");
     return;
+  }
+  // Filter by --cwd if provided
+  if (opts.cwd) {
+    const targetCwd = resolve(opts.cwd);
+    sessions = sessions.filter((s) => s.cwd === targetCwd);
+    if (sessions.length === 0) {
+      console.log(`No sessions for cwd: ${targetCwd}`);
+      return;
+    }
   }
   console.log("Tracked sessions:");
   for (const s of sessions) {
@@ -577,6 +586,17 @@ async function cmdSessionList() {
 
 async function cmdSessionShow(opts, acpx) {
   if (!opts.sessionName) fail("session show requires --name <name>");
+
+  // Auto-resolve --cwd from manifest if not provided
+  if (!opts.cwd) {
+    const manifest = readManifest();
+    const match = Object.values(manifest.sessions).find((s) => s.sessionName === opts.sessionName);
+    if (match) {
+      opts.cwd = match.cwd;
+    } else {
+      fail(`Session "${opts.sessionName}" not found in manifest. Provide --cwd explicitly.`);
+    }
+  }
 
   // We need mode=session for readSessionRecord
   opts.mode = "session";
@@ -726,6 +746,15 @@ async function cmdSessionContinue(opts, acpx) {
   if (!opts.sessionName) fail("session continue requires --name <name>");
   if (!opts.prompt) fail("session continue requires --prompt <text>");
 
+  // Auto-resolve --cwd from manifest if not provided
+  if (!opts.cwd) {
+    const manifest = readManifest();
+    const match = Object.values(manifest.sessions).find((s) => s.sessionName === opts.sessionName);
+    if (match) {
+      opts.cwd = match.cwd;
+    }
+  }
+
   // Enforce Opus guardrail
   enforceOpusGuardrail(opts);
 
@@ -808,7 +837,7 @@ async function main() {
 
     case "session":
       if (opts.subcommand === "list") {
-        await cmdSessionList();
+        await cmdSessionList(opts);
       } else if (opts.subcommand === "show") {
         await cmdSessionShow(opts, acpx);
       } else if (opts.subcommand === "start") {
