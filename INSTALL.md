@@ -36,11 +36,8 @@ sudo bash scripts/install.sh
 ## 安装选项
 
 ```bash
-# 只装 OpenClaw 侧（跳过 superclaw，比如已经装过）
-sudo bash scripts/install.sh --skip-superclaw
-
 # 只装 skill，不配置 hooks
-bash scripts/install.sh --skip-superclaw --skip-hooks
+bash scripts/install.sh --skip-hooks
 
 # 自定义 superclaw 安装路径（默认 /root/.openclaw/workspace/bin）
 SUPERCLAW_CLI_DIR=/opt/superclaw sudo bash scripts/install.sh
@@ -105,6 +102,18 @@ bash tests/run-all.sh
 bash tests/install/verify-install.sh
 ```
 
+## Updating
+
+After the initial install, use `superclaw update` to pull the latest changes and reinstall:
+
+```bash
+# Check if an update is available (no changes made)
+superclaw update --check
+
+# Pull latest and reinstall
+superclaw update
+```
+
 ## 快速开始
 
 在飞书里对 OpenClaw 说：
@@ -119,7 +128,7 @@ bash tests/install/verify-install.sh
 | 符号链接断裂 | `ls -la ~/.openclaw/workspace/skills/superclaw-cli/references/` |
 | Hook 没触发 | `jq '.hooks' ~/.claude/settings.json` |
 | 飞书没收到通知 | 检查 `$SUPERCLAW_FEISHU_TARGET` 和 `openclaw gateway status` |
-| superclaw 调不通 | `node /root/.openclaw/workspace/bin/superclaw.mjs status` |
+| superclaw 调不通 | `superclaw version` 确认版本，再 `node /root/.openclaw/workspace/bin/superclaw.mjs status` |
 | Claude Code 权限问题 | 确认设置了 `IS_SANDBOX=1` 环境变量 |
 
 详细排查见 [superclaw 文档](superclaw/references/setup-guide.md)。

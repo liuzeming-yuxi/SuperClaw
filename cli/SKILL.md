@@ -106,6 +106,61 @@ superclaw session show \
 superclaw status
 ```
 
+### Real-time process status
+
+```bash
+superclaw session ps
+```
+
+Shows live process info (PID, CPU, memory) for all running sessions.
+
+### Stop a session
+
+```bash
+superclaw session stop --name my-session
+superclaw session stop --name my-session --signal SIGKILL
+```
+
+Sends a signal (default SIGTERM) to the session's process tree. Use `--signal SIGKILL` for
+force-kill when graceful shutdown does not work.
+
+### Clean stale sessions
+
+```bash
+superclaw session clean
+superclaw session clean --dry-run
+```
+
+Removes sessions whose processes are no longer running. Use `--dry-run` to preview what would
+be cleaned without making changes.
+
+### Delete a session from manifest
+
+```bash
+superclaw session delete --name my-session
+```
+
+Removes the named session entry from the local manifest (`state/sessions.json`). Does not
+stop a running process — use `session stop` first if the session is still active.
+
+### Show version
+
+```bash
+superclaw version
+```
+
+Prints the installed superclaw version and the latest version available in the repo.
+
+### Update superclaw
+
+```bash
+superclaw update
+superclaw update --check
+```
+
+Pulls the latest repo changes and reinstalls. Use `--check` to see if an update is available
+without applying it.
+
 ## Workflow
 
 1. **Identify** the task as a coding task requiring file operations
@@ -132,6 +187,9 @@ For session workflows:
 | `--name <name>` | (required for session) | Session name |
 | `--file <path>` | (none) | Read prompt from file instead of `--prompt` |
 | `--last <N>` | (all) | Show only last N turns (for `session show`) |
+| `--signal <sig>` | `SIGTERM` | Signal for session stop |
+| `--dry-run` | false | Preview only for session clean |
+| `--check` | false | Preview only for update |
 
 ## Architecture
 
