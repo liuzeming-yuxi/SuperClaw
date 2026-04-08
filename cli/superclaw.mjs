@@ -565,6 +565,7 @@ function printUsage() {
     "  superclaw session ps [--cwd <path>]",
     "  superclaw session stop --name <n> [--signal SIGTERM|SIGKILL]",
     "  superclaw session clean [--dry-run]",
+    "  superclaw session resume --name <n> [-- <claude args>]",
     "  superclaw status",
     "  superclaw version",
     "  superclaw update [--check]",
@@ -599,11 +600,18 @@ function parseArgs(argv) {
     dryRun: false,        // --dry-run (for session clean)
     fix: false,           // --fix (for doctor)
     verbose: false,       // --verbose (for doctor)
+    passthrough: [],      // args after -- (for session resume → claude)
   };
 
   while (args.length > 0) {
     const arg = args.shift();
     if (!arg) continue;
+
+    // -- means "everything after this is passthrough to child process"
+    if (arg === "--") {
+      opts.passthrough = [...args];
+      break;
+    }
 
     if (arg === "--help" || arg === "-h") {
       printUsage();
@@ -621,7 +629,7 @@ function parseArgs(argv) {
       opts.mode = "session";
       // Next arg should be subcommand
       const sub = args[0];
-      if (["start", "continue", "list", "show", "delete", "ps", "stop", "clean"].includes(sub)) {
+      if (["start", "continue", "list", "show", "delete", "ps", "stop", "clean", "resume"].includes(sub)) {
         opts.subcommand = args.shift();
         if (opts.subcommand === "start") opts.freshSession = true;
       }
@@ -863,6 +871,84 @@ async function cmdSessionClean(opts) {
   } else {
     console.log(`\nCleaned ${stale.length} stale session(s).`);
   }
+}
+
+async function cmdSessionResume(opts) {
+  if (!opts.sessionName) fail("session resume requires --name <name>");
+
+  // 1. Find session in manifest to get cwd and model
+  const manifest = readManifest();
+  const entry = Object.values(manifest.sessions).find((s) => s.sessionName === opts.sessionName);
+  if (!entry) fail(`Session "${opts.sessionName}" not found in manifest.`);
+
+  const cwd = opts.cwd || entry.cwd;
+  const model = entry.model || "opus";
+
+  // 2. Compute config dir (same hash as buildConfigOverride)
+  const scope = JSON.stringify({
+    cwd: resolve(cwd),
+    sessionName: opts.sessionName,
+    model,
+  });
+  const digest = createHash("sha1").update(scope).digest("hex").slice(0, 12);
+  const configDir = resolve(CONFIG_ROOT, digest);
+
+  if (!existsSync(configDir)) {
+    fail(`Config directory not found: ${configDir}\nThis session may have been created with a different model or cwd.`);
+  }
+
+  // 3. Find session JSONL to extract Claude Code session ID
+  //    Claude Code stores sessions under projects/<slug>/<session-id>.jsonl
+  //    Slug is the absolute cwd with / and . replaced by -
+  const projectSlug = resolve(cwd).replace(/[/.]/g, "-");
+  const projectDir = resolve(configDir, "projects", projectSlug);
+  let sessionId = null;
+
+  // Try to find session JSONL in the projects dir
+  try {
+    const files = readdirSync(projectDir).filter((f) => f.endsWith(".jsonl"));
+    if (files.length === 1) {
+      sessionId = files[0].replace(".jsonl", "");
+    } else if (files.length > 1) {
+      // Pick the most recently modified
+      const sorted = files
+        .map((f) => ({ name: f, mtime: statSync(resolve(projectDir, f)).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime);
+      sessionId = sorted[0].name.replace(".jsonl", "");
+    }
+  } catch {
+    // projectDir doesn't exist — try acpSessionId from manifest
+  }
+
+  // Fallback: use acpSessionId from manifest
+  if (!sessionId && entry.acpSessionId) {
+    sessionId = entry.acpSessionId;
+  }
+
+  if (!sessionId) {
+    fail(`Cannot determine Claude Code session ID for "${opts.sessionName}".`);
+  }
+
+  info(`Resuming session: ${opts.sessionName}`);
+  info(`  config: ${configDir}`);
+  info(`  session: ${sessionId}`);
+  info(`  cwd: ${cwd}`);
+  if (opts.passthrough.length > 0) {
+    info(`  claude args: ${opts.passthrough.join(" ")}`);
+  }
+
+  // 4. Exec claude --resume with the right CLAUDE_CONFIG_DIR
+  const claudeArgs = ["--resume", sessionId, ...opts.passthrough];
+  const env = { ...process.env, CLAUDE_CONFIG_DIR: configDir, IS_SANDBOX: "1" };
+
+  const child = spawn("claude", claudeArgs, {
+    cwd: resolve(cwd),
+    env,
+    stdio: "inherit",
+  });
+
+  child.on("exit", (code) => process.exit(code ?? 1));
+  child.on("error", (err) => fail(`Failed to launch claude: ${err.message}`));
 }
 
 async function cmdSessionShow(opts, acpx) {
@@ -1330,12 +1416,13 @@ async function main() {
   }
 
   // Step 2: Ensure env vars — skip for commands that don't need API credentials
-  if (opts.command !== "doctor" && opts.command !== "version") {
+  const skipEnv = opts.command === "doctor" || opts.command === "version" || opts.subcommand === "resume";
+  if (!skipEnv) {
     ensureEnv();
   }
 
   // Step 3: Resolve acpx (lazy — only needed for commands that use it)
-  const acpx = (opts.command !== "doctor" && opts.command !== "version") ? resolveAcpx() : null;
+  const acpx = !skipEnv ? resolveAcpx() : null;
 
   // Step 4: Dispatch
   switch (opts.command) {
@@ -1379,12 +1466,14 @@ async function main() {
         await cmdSessionStop(opts);
       } else if (opts.subcommand === "clean") {
         await cmdSessionClean(opts);
+      } else if (opts.subcommand === "resume") {
+        await cmdSessionResume(opts);
       } else if (opts.subcommand === "start") {
         await cmdSessionStart(opts, acpx);
       } else if (opts.subcommand === "continue") {
         await cmdSessionContinue(opts, acpx);
       } else {
-        fail("Unknown session subcommand. Use: start, continue, show, delete, list, ps, stop, clean");
+        fail("Unknown session subcommand. Use: start, continue, show, delete, list, ps, stop, clean, resume");
       }
       break;
 
@@ -1412,7 +1501,7 @@ if (isMainModule) {
   const needsIsolation = !process.env.SUPERCLAW_SETSID_DONE
     && process.argv.some((a) => a === "exec" || a === "session");
   const isShortSubcommand = process.argv.some(
-    (a) => a === "status" || a === "list" || a === "show" || a === "ps" || a === "stop" || a === "clean" || a === "delete" || a === "version" || a === "update" || a === "doctor"
+    (a) => a === "status" || a === "list" || a === "show" || a === "ps" || a === "stop" || a === "clean" || a === "delete" || a === "version" || a === "update" || a === "doctor" || a === "resume"
   );
 
   if (needsIsolation && !isShortSubcommand) {
