@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-chi/chi/v5"
@@ -32,9 +33,9 @@ func main() {
 		SCRoot: scRoot,
 		Hub:    hub,
 		ChatConfig: chat.Config{
-			OpenClawBaseURL: "http://127.0.0.1:18789",
-			OpenClawToken:   "130b9e35e8c7e52b3992253f54047d4726ec60c4d23c5ab1",
-			SuperclawPath:  "/root/.openclaw/workspace/bin/superclaw.mjs",
+			OpenClawBaseURL: envOr("OPENCLAW_BASE_URL", "http://127.0.0.1:18789"),
+			OpenClawToken:   os.Getenv("OPENCLAW_TOKEN"),
+			SuperclawPath:  envOr("SUPERCLAW_PATH", "/root/.openclaw/workspace/bin/superclaw.mjs"),
 		},
 	}
 
@@ -42,7 +43,7 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://192.168.16.30:*", "http://localhost:*", "http://127.0.0.1:*"},
+		AllowedOrigins:   strings.Split(envOr("BOARD_ALLOWED_ORIGINS", "http://localhost:*,http://127.0.0.1:*"), ","),
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Content-Type"},
 		AllowCredentials: true,
@@ -82,6 +83,13 @@ func main() {
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
 
 func startWatcher(scRoot string, hub *ws.Hub) {
