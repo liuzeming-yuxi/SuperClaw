@@ -1,6 +1,6 @@
 {
   "name": "superclaw",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "OpenClaw + Claude Code 的超级编码体。人管方向，OpenClaw 管对齐和验收，Claude Code 管执行。",
   "type": "module",
   "license": "MIT",

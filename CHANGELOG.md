@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-04-08
+
+### Added
+
+- **`superclaw doctor`**: 34-item health check across 5 categories (prerequisites, installation, configuration, runtime, connectivity) with `--fix` auto-repair and `--verbose` detailed output
+- **`superclaw version`**: Show installed vs repo version with drift detection
+- **`superclaw update [--check]`**: Pull latest repo changes and reinstall
+- **`superclaw session ps`**: Real-time process status table for all sessions
+- **`superclaw session stop`**: Stop running sessions by name with PID identity verification
+- **`superclaw session clean`**: Clean stale session tracking files
+- **SECURITY.md**: Vulnerability reporting policy via GitHub Security Advisories
+- **.editorconfig** and **.nvmrc**: Editor consistency and Node version pinning
+
+### Changed
+
+- **Unified installer**: Merged `install.sh` + `setup.sh` into single idempotent all-symlink installer
+- **Renamed `cc-delegate` → `superclaw`**: CLI command, directory (`cc-delegate/` → `cli/`), all 30 files updated
+- **Version management**: `~/.superclaw/installed.json` tracks installed version/commit
+- **README restructured**: Quick Start points agents to INSTALL.md, humans to OpenClaw
+- **INSTALL.md rewritten**: Pure agent-facing operational guide
+
+### Fixed
+
+- **Symlink .env resolution**: `SCRIPT_DIR` now uses install path (not repo source) for .env and state/
+- **PID reuse safety**: `isPidOurs()` verifies process start time via `/proc/<pid>/stat`
+- **Hardcoded credentials removed**: board-server token and IP moved to environment variables
+
+### Security
+
+- Removed hardcoded `OpenClawToken` from `board-server/cmd/server/main.go`
+- Removed hardcoded internal IP `192.168.16.30` from CORS AllowedOrigins
+
 ## [0.1.0] - 2026-03-28
 
 ### Added
