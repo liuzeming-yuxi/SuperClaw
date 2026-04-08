@@ -54,7 +54,7 @@ Plan 必须经过 review 才能执行。
 ```
 收到 approved spec
   → 准备上下文（spec + 代码结构 + 关键文件）
-  → superclaw session start（传入 spec + writing-plans 指令）
+  → superclaw start（传入 spec + writing-plans 指令）
   → Claude Code 探索代码库 + 出 plan 草案
   → OpenClaw review plan
       ├─ 有问题 → 发修改意见给 CC → CC 修改 → 重新 review（循环）
@@ -78,7 +78,7 @@ Plan 必须经过 review 才能执行。
 通过 superclaw 启动 Claude Code：
 
 ```bash
-superclaw session start \
+superclaw start \
   --name "superclaw-<feature>" \
   --cwd <project-dir> \
   --prompt "
@@ -118,7 +118,7 @@ Claude Code 出 plan 后，OpenClaw 独立检查：
 ### Review 结果
 
 - **通过** → 进入人类 review gate
-- **有问题** → `superclaw session continue --name "superclaw-<feature>"` 发修改意见 → CC 修改 → 重新 review
+- **有问题** → `superclaw send "superclaw-<feature>"` 发修改意见 → CC 修改 → 重新 review
 
 ## 人类 Review Gate
 
@@ -166,7 +166,7 @@ Plan approved 后，给用户选执行方式：
 
 invoke `superclaw:execute`（传入 plan 路径 + 执行方式 + session 名称 `superclaw-<feature>`）
 
-**重要：session 命名用 `superclaw-<feature>`（不带阶段前缀）。execute 阶段会 `session continue` 同一个 session，复用 plan 阶段 CC 对代码库的理解，避免重复探索。**
+**重要：session 命名用 `superclaw-<feature>`（不带阶段前缀）。execute 阶段会 `send` 同一个 session，复用 plan 阶段 CC 对代码库的理解，避免重复探索。**
 
 ## Anti-Pattern
 

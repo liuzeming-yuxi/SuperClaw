@@ -52,7 +52,7 @@ OpenClaw 只需要：**启动 → 等结果 → 收到通知后触发 verify**
 
 ```
 收到 approved plan + 执行方式 + session 名称
-  → superclaw session continue（复用 plan 阶段的 session）
+  → superclaw send（复用 plan 阶段的 session）
   → Claude Code 自治区域
       │  ┌─────────────────────────────────────────┐
       │  │ 读 plan → 逐 task 执行                    │
@@ -82,7 +82,7 @@ OpenClaw 只需要：**启动 → 等结果 → 收到通知后触发 verify**
 **复用 plan 阶段的 session**——CC 已经探索过代码库，直接 continue 而不是 start 新 session：
 
 ```bash
-superclaw session continue \
+superclaw send \
   --name "superclaw-<feature>" \
   --cwd <project-dir> \
   --prompt "
@@ -113,7 +113,7 @@ superclaw session continue \
 ### Inline 模式
 
 ```bash
-superclaw session continue \
+superclaw send \
   --name "superclaw-<feature>" \
   --cwd <project-dir> \
   --prompt "
@@ -131,7 +131,7 @@ OpenClaw 在 Claude Code 执行期间可以做：
    - OpenClaw 收到飞书消息或读到 `.superclaw/last_event.json` 后触发 verify
 
 2. **主动轮询**（备选）— 如果 Hook 不可用
-   - 定期 `superclaw session list` 检查 session 状态
+   - 定期 `superclaw ps` 检查 session 状态
    - session 结束后读取输出
 
 ## 处理 Claude Code 上报
@@ -145,7 +145,7 @@ CC: "Task 3 需要知道数据库的连接字符串配置方式，plan 里没写
 ```
 
 OpenClaw 处理：
-1. 如果 OpenClaw 能回答 → 直接 `superclaw session continue` 传入答案
+1. 如果 OpenClaw 能回答 → 直接 `superclaw send` 传入答案
 2. 如果不能 → 问用户 → 拿到答案后传给 CC
 
 ### BLOCKED — CC 无法继续

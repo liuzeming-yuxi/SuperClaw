@@ -86,7 +86,7 @@ description: |
 
 推荐异步运行：
 ```bash
-superclaw session start \
+superclaw start \
   --name "autodream-$(date +%Y%m%d)" \
   --prompt "invoke superclaw:autodream"
 ```

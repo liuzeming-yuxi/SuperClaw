@@ -44,7 +44,7 @@ All commands run as root with IS_SANDBOX=1. Run via `exec`.
 ### One-shot task (exec)
 
 ```bash
-superclaw exec \
+superclaw run \
   --cwd /path/to/project \
   --prompt "your coding task description"
 ```
@@ -54,7 +54,7 @@ Default model is `opus`. Override with `--model sonnet`.
 ### Start a named session
 
 ```bash
-superclaw session start \
+superclaw start \
   --name my-session \
   --cwd /path/to/project \
   --prompt "initial task"
@@ -66,7 +66,7 @@ and records the session in a local manifest for tracking.
 ### Continue a session
 
 ```bash
-superclaw session continue \
+superclaw send \
   --name my-session \
   --cwd /path/to/project \
   --prompt "next task"
@@ -78,7 +78,7 @@ originally created through the wrapper can be continued (prevents model drift).
 ### List sessions
 
 ```bash
-superclaw session list
+superclaw ps
 ```
 
 ### Show session context
@@ -86,7 +86,7 @@ superclaw session list
 View the full conversation history of a session in Markdown format:
 
 ```bash
-superclaw session show \
+superclaw show \
   --name my-session \
   --cwd /path/to/project
 ```
@@ -94,7 +94,7 @@ superclaw session show \
 Show only the last N turns:
 
 ```bash
-superclaw session show \
+superclaw show \
   --name my-session \
   --cwd /path/to/project \
   --last 5
@@ -109,7 +109,7 @@ superclaw status
 ### Real-time process status
 
 ```bash
-superclaw session ps
+superclaw ps
 ```
 
 Shows live process info (PID, CPU, memory) for all running sessions.
@@ -117,8 +117,8 @@ Shows live process info (PID, CPU, memory) for all running sessions.
 ### Stop a session
 
 ```bash
-superclaw session stop --name my-session
-superclaw session stop --name my-session --signal SIGKILL
+superclaw stop my-session
+superclaw stop my-session --signal SIGKILL
 ```
 
 Sends a signal (default SIGTERM) to the session's process tree. Use `--signal SIGKILL` for
@@ -127,8 +127,8 @@ force-kill when graceful shutdown does not work.
 ### Clean stale sessions
 
 ```bash
-superclaw session clean
-superclaw session clean --dry-run
+superclaw clean
+superclaw clean --dry-run
 ```
 
 Removes sessions whose processes are no longer running. Use `--dry-run` to preview what would
@@ -137,11 +137,11 @@ be cleaned without making changes.
 ### Delete a session from manifest
 
 ```bash
-superclaw session delete --name my-session
+superclaw rm my-session
 ```
 
 Removes the named session entry from the local manifest (`state/sessions.json`). Does not
-stop a running process — use `session stop` first if the session is still active.
+stop a running process — use `stop` first if the session is still active.
 
 ### Show version
 
@@ -176,15 +176,15 @@ Use `--verbose` to see all checks including passed ones. Use `--fix` to auto-rep
 ## Workflow
 
 1. **Identify** the task as a coding task requiring file operations
-2. **Determine** if it's one-shot (`exec`) or part of ongoing work (`session start/continue`)
+2. **Determine** if it's one-shot (`exec`) or part of ongoing work (`start/continue`)
 3. **Set `--cwd`** to the project directory (important — Claude Code operates relative to this)
 4. **Write the prompt** describing the task clearly
 5. **Run** the command via `exec` tool
 6. **Report** the result back to the user
 
 For session workflows:
-- Use `session start` for new projects or new feature branches
-- Use `session continue` for follow-up tasks in the same context
+- Use `start` for new projects or new feature branches
+- Use `send` for follow-up tasks in the same context
 - Session names should be descriptive: `nexus-billing`, `pivot-api`, `frontend-refactor`
 
 ## Options Reference
@@ -198,9 +198,9 @@ For session workflows:
 | `--timeout <sec>` | (none) | Timeout in seconds |
 | `--name <name>` | (required for session) | Session name |
 | `--file <path>` | (none) | Read prompt from file instead of `--prompt` |
-| `--last <N>` | (all) | Show only last N turns (for `session show`) |
-| `--signal <sig>` | `SIGTERM` | Signal for session stop |
-| `--dry-run` | false | Preview only for session clean |
+| `--last <N>` | (all) | Show only last N turns (for `show`) |
+| `--signal <sig>` | `SIGTERM` | Signal for stop |
+| `--dry-run` | false | Preview only for clean |
 | `--check` | false | Preview only for update |
 | `--fix` | false | Auto-repair fixable issues (for `doctor`) |
 | `--verbose` | false | Show all checks including passed (for `doctor`) |
@@ -220,7 +220,7 @@ Key behaviors:
 - **Env injection**: Reads `.env` file, exports vars into the subprocess
 - **Model pinning**: For sessions, creates a per-scope `CLAUDE_CONFIG_DIR` with `settings.json`
 - **Session tracking**: Maintains `state/sessions.json` manifest mapping session names to ACPX IDs
-- **Opus guardrail**: Prevents session continue on non-wrapper-tracked sessions (avoids model drift)
+- **Opus guardrail**: Prevents send on non-wrapper-tracked sessions (avoids model drift)
 - **Auto-retry**: If Claude session reports reconnect, retries the prompt once
 - **`--approve-all`**: All tool calls are auto-approved (no interactive prompts)
 - **Process isolation**: Automatically re-execs under `setsid` for exec/session commands, creating an independent session group that survives Gateway restarts
@@ -236,10 +236,10 @@ When calling superclaw via the `exec` tool, you **MUST** set a sufficient timeou
 
 ```bash
 # BAD — default 5s timeout will kill superclaw immediately
-exec: superclaw exec --prompt "..."
+exec: superclaw run --prompt "..."
 
 # GOOD — set exec timeout to match --timeout
-exec timeout=2400: superclaw exec --timeout 2400 --prompt "..."
+exec timeout=2400: superclaw run --timeout 2400 --prompt "..."
 ```
 
 The `exec` tool timeout and superclaw's `--timeout` are DIFFERENT things:
@@ -252,21 +252,21 @@ The `exec` tool timeout and superclaw's `--timeout` are DIFFERENT things:
 
 **Short tasks (< 5 min):**
 ```bash
-exec timeout=300: superclaw exec \
+exec timeout=300: superclaw run \
   --cwd /path/to/project --model sonnet --timeout 300 \
   --prompt "simple task"
 ```
 
 **Long tasks (5-40 min):**
 ```bash
-exec timeout=2400: superclaw exec \
+exec timeout=2400: superclaw run \
   --cwd /path/to/project --model opus --timeout 2400 \
   --prompt "complex task"
 ```
 
 **Very long tasks (> 40 min) — fire and forget:**
 ```bash
-exec timeout=10: setsid superclaw exec \
+exec timeout=10: setsid superclaw run \
   --cwd /path/to/project --model opus --timeout 7200 \
   --file /tmp/prompt.md > /tmp/cc-output.log 2>&1 &
 echo "CC started, PID=$!"
@@ -290,7 +290,7 @@ exec timeout=5: tail -5 ~/.superclaw/state/tool_log.jsonl
 
 View session context after completion:
 ```bash
-exec timeout=30: superclaw session show \
+exec timeout=30: superclaw show \
   --name my-session --cwd /path/to/project --last 5
 ```
 

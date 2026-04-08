@@ -122,14 +122,14 @@ session 命名：`superclaw-<feature>`（不带阶段前缀）。
 | 场景 | 命令 | 原因 |
 |---|---|---|
 | 快速查询、代码检查（< 2 分钟） | `exec` | 一次性，轻量 |
-| **plan 阶段首次启动** | **`session start --name superclaw-<feature>`** | CC 探索代码库，建立上下文 |
-| **execute 阶段** | **`session continue --name superclaw-<feature>`** | 复用 plan 阶段的代码库理解 |
-| **verify 失败后回到 plan/execute** | **`session continue`** | 继续同一个 session，不从头来 |
-| 中途需要沟通（NEEDS_CONTEXT 等） | `session continue` | 延续上下文 |
+| **plan 阶段首次启动** | **`start --name superclaw-<feature>`** | CC 探索代码库，建立上下文 |
+| **execute 阶段** | **`send --name superclaw-<feature>`** | 复用 plan 阶段的代码库理解 |
+| **verify 失败后回到 plan/execute** | **`send`** | 继续同一个 session，不从头来 |
+| 中途需要沟通（NEEDS_CONTEXT 等） | `send` | 延续上下文 |
 
 **关键规则：**
-- `session start` 只在一个功能的第一次 CC 交互时使用
-- 之后 plan → execute → 修复 → 再执行，全部用 `session continue`
+- `start` 只在一个功能的第一次 CC 交互时使用
+- 之后 plan → execute → 修复 → 再执行，全部用 `send`
 - CC 已经在 plan 阶段深度探索过代码库，复用 session 避免重复探索
 - execute 阶段用 `exec` 是严重错误：跑了 30 分钟被 kill 全丢，无法恢复
 
@@ -158,9 +158,9 @@ session 命名：`superclaw-<feature>`（不带阶段前缀）。
 通过 superclaw 与 Claude Code 通信。核心规则：
 
 - **exec**：一次性任务（plan 生成、快速验证）— **禁止用于 execute 阶段**
-- **session start**：开始一个新的开发任务 — **execute 阶段必须用这个**
-- **session continue**：继续同一个任务
-- **session show**：查看历史对话上下文
+- **start**：开始一个新的开发任务 — **execute 阶段必须用这个**
+- **send**：继续同一个任务
+- **show**：查看历史对话上下文
 - **--cwd** 必须指向项目目录
 - **prompt 要写清楚**：给 CC 的指令要包含完整上下文（spec 内容、plan 内容），不要假设 CC 记得之前的对话
 
@@ -170,10 +170,10 @@ session 命名：`superclaw-<feature>`（不带阶段前缀）。
 
 ```bash
 # 短任务（< 5 分钟）
-exec timeout=300: superclaw exec --timeout 300 --prompt "..."
+exec timeout=300: superclaw run --timeout 300 --prompt "..."
 
 # 长任务（5-40 分钟，典型的 execute 阶段）
-exec timeout=2400: superclaw exec --timeout 2400 --prompt "..."
+exec timeout=2400: superclaw run --timeout 2400 --prompt "..."
 ```
 
 **exec timeout 必须 >= superclaw 的 --timeout 值。**
@@ -189,7 +189,7 @@ exec timeout=5: tail -5 ~/.superclaw/state/tool_log.jsonl
 
 CC 完成后，查看产出：
 ```bash
-exec timeout=30: superclaw session show --name <name> --cwd <path> --last 3
+exec timeout=30: superclaw show <name> --cwd <path> --last 3
 ```
 
 ### 已知问题：用户 /stop 导致 Gateway 崩溃
