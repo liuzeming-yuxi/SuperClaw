@@ -161,6 +161,18 @@ superclaw update --check
 Pulls the latest repo changes and reinstalls. Use `--check` to see if an update is available
 without applying it.
 
+### Health check
+
+```bash
+superclaw doctor
+superclaw doctor --verbose
+superclaw doctor --fix
+```
+
+Checks 27 items across 5 categories: prerequisites, installation, configuration, runtime, and connectivity.
+Use `--verbose` to see all checks including passed ones. Use `--fix` to auto-repair fixable issues
+(stale sessions, broken symlinks, log rotation).
+
 ## Workflow
 
 1. **Identify** the task as a coding task requiring file operations
@@ -190,6 +202,8 @@ For session workflows:
 | `--signal <sig>` | `SIGTERM` | Signal for session stop |
 | `--dry-run` | false | Preview only for session clean |
 | `--check` | false | Preview only for update |
+| `--fix` | false | Auto-repair fixable issues (for `doctor`) |
+| `--verbose` | false | Show all checks including passed (for `doctor`) |
 
 ## Architecture
 
