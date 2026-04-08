@@ -495,6 +495,7 @@ function printUsage() {
     "  cc-delegate session start --name <n> [--cwd <path>] [--model opus|sonnet] --prompt <text>",
     "  cc-delegate session continue --name <n> [--cwd <path>] --prompt <text>",
     "  cc-delegate session show --name <n> [--cwd <path>] [--last N]",
+    "  cc-delegate session delete --name <n>",
     "  cc-delegate session list",
     "  cc-delegate status",
     "",
@@ -544,7 +545,7 @@ function parseArgs(argv) {
       opts.mode = "session";
       // Next arg should be subcommand
       const sub = args[0];
-      if (sub === "start" || sub === "continue" || sub === "list" || sub === "show") {
+      if (sub === "start" || sub === "continue" || sub === "list" || sub === "show" || sub === "delete") {
         opts.subcommand = args.shift();
         if (opts.subcommand === "start") opts.freshSession = true;
       }
@@ -627,6 +628,28 @@ async function cmdSessionList(opts) {
   for (const s of sessions) {
     console.log(`  ${s.sessionName} | model=${s.model} | cwd=${s.cwd} | updated=${s.updatedAt}`);
   }
+}
+
+async function cmdSessionDelete(opts) {
+  if (!opts.sessionName) fail("session delete requires --name <name>");
+
+  const manifest = readManifest();
+  const key = Object.keys(manifest.sessions).find(
+    (k) => manifest.sessions[k].sessionName === opts.sessionName,
+  );
+
+  if (!key) {
+    fail(`Session "${opts.sessionName}" not found in manifest.`);
+  }
+
+  const session = manifest.sessions[key];
+  delete manifest.sessions[key];
+  writeManifest(manifest);
+
+  // Also clean up active session files if they exist
+  removeActiveSession(opts, 0);
+
+  info(`Deleted session: ${opts.sessionName} (cwd=${session.cwd}, model=${session.model})`);
 }
 
 async function cmdSessionShow(opts, acpx) {
@@ -923,12 +946,14 @@ async function main() {
         await cmdSessionList(opts);
       } else if (opts.subcommand === "show") {
         await cmdSessionShow(opts, acpx);
+      } else if (opts.subcommand === "delete") {
+        await cmdSessionDelete(opts);
       } else if (opts.subcommand === "start") {
         await cmdSessionStart(opts, acpx);
       } else if (opts.subcommand === "continue") {
         await cmdSessionContinue(opts, acpx);
       } else {
-        fail("Unknown session subcommand. Use: start, continue, show, list");
+        fail("Unknown session subcommand. Use: start, continue, show, delete, list");
       }
       break;
 
