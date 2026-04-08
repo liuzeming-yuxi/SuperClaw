@@ -667,23 +667,52 @@ async function cmdSessionShow(opts, acpx) {
     return;
   }
 
-  // Parse messages into flat role/text pairs
+  // Parse messages into flat turn entries (text + tool calls)
   const turns = record.messages.flatMap((m) => {
+    // Tool results (may appear in User messages as ToolResult)
     if (m?.User?.content) {
-      const text = m.User.content
-        .filter((i) => typeof i.Text === "string")
-        .map((i) => i.Text)
-        .join("\n")
-        .trim();
-      return text ? [{ role: "user", text }] : [];
+      const textParts = [];
+      const toolParts = [];
+      for (const item of m.User.content) {
+        if (typeof item.Text === "string") {
+          textParts.push(item.Text);
+        }
+        if (item.ToolResult) {
+          const tr = item.ToolResult;
+          const content = typeof tr.content === "string" ? tr.content
+            : Array.isArray(tr.content) ? tr.content.map((c) => c.Text || c.text || "").join("\n")
+            : "";
+          const truncated = content.length > 200 ? content.slice(0, 200) + "..." : (content || "(no output)");
+          toolParts.push({ role: "tool-result", text: `[result] ${tr.name || "tool"}\n  ${truncated}` });
+        }
+      }
+      const text = textParts.join("\n").trim();
+      const result = [];
+      if (text) result.push({ role: "user", text });
+      result.push(...toolParts);
+      return result;
     }
     if (m?.Agent?.content) {
-      const text = m.Agent.content
-        .filter((i) => typeof i.Text === "string")
-        .map((i) => i.Text)
-        .join("\n")
-        .trim();
-      return text ? [{ role: "assistant", text }] : [];
+      const parts = [];
+      let text = "";
+      for (const item of m.Agent.content) {
+        if (typeof item.Text === "string") {
+          text += (text ? "\n" : "") + item.Text;
+        }
+        // Tool calls: ToolUse field from acpx session record
+        if (item.ToolUse) {
+          const tc = item.ToolUse;
+          const name = tc.name || "unknown";
+          const input = tc.input || tc.raw_input || {};
+          const inputStr = typeof input === "string" ? input : JSON.stringify(input);
+          const truncated = inputStr.length > 120 ? inputStr.slice(0, 120) + "..." : inputStr;
+          parts.push({ role: "tool", text: `[tool] ${name}\n  input: ${truncated}` });
+        }
+      }
+      if (text.trim()) {
+        parts.unshift({ role: "assistant", text: text.trim() });
+      }
+      return parts.length > 0 ? parts : [];
     }
     return [];
   });
@@ -715,13 +744,19 @@ async function cmdSessionShow(opts, acpx) {
   for (const turn of display) {
     if (turn.role === "user") {
       console.log(`## 🧑 User\n`);
-    } else {
+      console.log(turn.text);
+      console.log("\n---\n");
+    } else if (turn.role === "assistant") {
       console.log(`## 🤖 Assistant\n`);
+      console.log(turn.text);
+      console.log("\n---\n");
+    } else if (turn.role === "tool") {
+      console.log(turn.text);
+      console.log("");
+    } else if (turn.role === "tool-result") {
+      console.log(turn.text);
+      console.log("");
     }
-    console.log(turn.text);
-    console.log("");
-    console.log("---");
-    console.log("");
   }
 }
 
