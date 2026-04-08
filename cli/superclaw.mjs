@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// cc-delegate.mjs — Claude Code delegate wrapper for OpenClaw
+// superclaw.mjs — Claude Code delegate wrapper for OpenClaw
 // Inspired by Agora's acpx-delegate.mjs, adapted for our environment.
 // Handles: env injection, acpx orchestration, IS_SANDBOX=1 yolo mode,
 //          session management, Opus model bootstrap, and session manifest tracking.
 
 import {
   existsSync, mkdirSync, readFileSync, readdirSync,
-  rmSync, statSync, writeFileSync,
+  realpathSync, rmSync, statSync, writeFileSync,
 } from "node:fs";
 import { execSync, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -32,12 +32,12 @@ const INSTALLED_JSON_PATH = resolve(homedir(), ".superclaw", "installed.json");
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function fail(msg, code = 1) {
-  process.stderr.write(`[cc-delegate] Error: ${msg}\n`);
+  process.stderr.write(`[superclaw] Error: ${msg}\n`);
   process.exit(code);
 }
 
 function info(msg) {
-  process.stderr.write(`[cc-delegate] ${msg}\n`);
+  process.stderr.write(`[superclaw] ${msg}\n`);
 }
 
 /** Strip surrounding quotes (single or double) from a value string. */
@@ -277,6 +277,57 @@ function removeActiveSession(opts, childPid, sessionsDir = DEFAULT_SESSIONS_DIR)
   stopDelegateHeartbeat();
 }
 
+// ─── Session status utilities ─────────────────────────────────────────────────
+
+function isPidAlive(pid) {
+  try { process.kill(pid, 0); return true; }
+  catch (e) { return e.code === "EPERM"; }
+}
+
+function isPidOurs(pid, expectedStartTime) {
+  if (!isPidAlive(pid)) return false;
+  if (!expectedStartTime) return true;
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const startTicks = parseInt(stat.split(" ")[21], 10);
+    const uptime = parseFloat(readFileSync("/proc/uptime", "utf8").split(" ")[0]);
+    const bootTimeSec = Date.now() / 1000 - uptime;
+    const procStartMs = (bootTimeSec + startTicks / 100) * 1000;
+    const expectedMs = new Date(expectedStartTime).getTime();
+    return Math.abs(procStartMs - expectedMs) < 2000;
+  } catch {
+    return true;
+  }
+}
+
+function formatUptime(isoString) {
+  const ms = Date.now() - new Date(isoString).getTime();
+  if (ms < 0) return "0s";
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  if (h < 24) return `${h}h ${rm}m`;
+  const d = Math.floor(h / 24);
+  return `${d}d ${h % 24}h`;
+}
+
+function readAllActiveSessions(sessionsDir = DEFAULT_SESSIONS_DIR) {
+  if (!existsSync(sessionsDir)) return [];
+  const files = readdirSync(sessionsDir).filter((f) => f.endsWith(".json"));
+  const results = [];
+  for (const f of files) {
+    try {
+      const data = JSON.parse(readFileSync(resolve(sessionsDir, f), "utf8"));
+      const alive = typeof data.pid === "number" && isPidOurs(data.pid, data.start_time);
+      results.push({ ...data, fileName: f, alive, uptime: alive && data.start_time ? formatUptime(data.start_time) : "-" });
+    } catch { /* skip corrupt files */ }
+  }
+  return results;
+}
+
 // ─── Delegate-level heartbeat (independent of CC hooks) ───────────────────────
 // Covers the blind spot where CC is in a long thinking phase with no tool calls,
 // so the PostToolUse hook never fires and the hook-based heartbeat stays silent.
@@ -489,18 +540,21 @@ function buildBootstrapArgs(acpxArgs, opts, commonArgs) {
 function printUsage() {
   process.stderr.write([
     "",
-    "cc-delegate — Claude Code delegate for OpenClaw",
+    "superclaw — Claude Code delegate for OpenClaw",
     "",
     "Usage:",
-    "  cc-delegate exec [--cwd <path>] [--model opus|sonnet] [--max-turns N] [--timeout S] [--format text|json|quiet] --prompt <text>",
-    "  cc-delegate session start --name <n> [--cwd <path>] [--model opus|sonnet] --prompt <text>",
-    "  cc-delegate session continue --name <n> [--cwd <path>] --prompt <text>",
-    "  cc-delegate session show --name <n> [--cwd <path>] [--last N]",
-    "  cc-delegate session delete --name <n>",
-    "  cc-delegate session list",
-    "  cc-delegate status",
-    "  cc-delegate version",
-    "  cc-delegate update [--check]",
+    "  superclaw exec [--cwd <path>] [--model opus|sonnet] [--max-turns N] [--timeout S] [--format text|json|quiet] --prompt <text>",
+    "  superclaw session start --name <n> [--cwd <path>] [--model opus|sonnet] --prompt <text>",
+    "  superclaw session continue --name <n> [--cwd <path>] --prompt <text>",
+    "  superclaw session show --name <n> [--cwd <path>] [--last N]",
+    "  superclaw session delete --name <n>",
+    "  superclaw session list",
+    "  superclaw session ps [--cwd <path>]",
+    "  superclaw session stop --name <n> [--signal SIGTERM|SIGKILL]",
+    "  superclaw session clean [--dry-run]",
+    "  superclaw status",
+    "  superclaw version",
+    "  superclaw update [--check]",
     "",
     "Environment:",
     "  Reads .env from script directory for ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, etc.",
@@ -527,6 +581,8 @@ function parseArgs(argv) {
     last: null,            // --last N: show only last N turns
     mode: null,           // derived: "exec" | "session"
     checkOnly: false,     // --check (for update)
+    signal: null,         // --signal SIGTERM|SIGKILL (for session stop)
+    dryRun: false,        // --dry-run (for session clean)
   };
 
   while (args.length > 0) {
@@ -549,7 +605,7 @@ function parseArgs(argv) {
       opts.mode = "session";
       // Next arg should be subcommand
       const sub = args[0];
-      if (sub === "start" || sub === "continue" || sub === "list" || sub === "show" || sub === "delete") {
+      if (["start", "continue", "list", "show", "delete", "ps", "stop", "clean"].includes(sub)) {
         opts.subcommand = args.shift();
         if (opts.subcommand === "start") opts.freshSession = true;
       }
@@ -580,6 +636,8 @@ function parseArgs(argv) {
     if (arg === "--resume-session") { opts.resumeSession = args.shift(); continue; }
     if (arg === "--last") { opts.last = parseInt(args.shift(), 10); continue; }
     if (arg === "--check") { opts.checkOnly = true; continue; }
+    if (arg === "--signal") { opts.signal = args.shift(); continue; }
+    if (arg === "--dry-run") { opts.dryRun = true; continue; }
 
     // Treat unknown as prompt text
     const rest = [arg, ...args];
@@ -605,7 +663,7 @@ async function cmdStatus(acpx) {
   const sessionCount = Object.keys(manifest.sessions).length;
   const sessions = Object.values(manifest.sessions);
 
-  console.log("cc-delegate status");
+  console.log("superclaw status");
   console.log("─".repeat(40));
   console.log(`  acpx: ${acpx.command} ${acpx.args.join(" ")}`);
   console.log(`  state: ${STATE_DIR}`);
@@ -628,7 +686,6 @@ async function cmdSessionList(opts) {
     console.log("No tracked sessions.");
     return;
   }
-  // Filter by --cwd if provided
   if (opts.cwd) {
     const targetCwd = resolve(opts.cwd);
     sessions = sessions.filter((s) => s.cwd === targetCwd);
@@ -637,9 +694,14 @@ async function cmdSessionList(opts) {
       return;
     }
   }
+  const activeSessions = readAllActiveSessions();
+  const activeByName = new Map(activeSessions.map((s) => [s.session_name, s]));
   console.log("Tracked sessions:");
   for (const s of sessions) {
-    console.log(`  ${s.sessionName} | model=${s.model} | cwd=${s.cwd} | updated=${s.updatedAt}`);
+    const active = activeByName.get(s.sessionName);
+    let status = "stopped";
+    if (active) status = active.alive ? "running" : "stale";
+    console.log(`  ${s.sessionName} | model=${s.model} | status=${status} | cwd=${s.cwd} | updated=${s.updatedAt}`);
   }
 }
 
@@ -663,6 +725,122 @@ async function cmdSessionDelete(opts) {
   removeActiveSession(opts, 0);
 
   info(`Deleted session: ${opts.sessionName} (cwd=${session.cwd}, model=${session.model})`);
+}
+
+async function cmdSessionPs(opts) {
+  const manifest = readManifest();
+  const activeSessions = readAllActiveSessions();
+  const activeByName = new Map(activeSessions.map((s) => [s.session_name, s]));
+  let entries = Object.values(manifest.sessions);
+  if (opts.cwd) {
+    const targetCwd = resolve(opts.cwd);
+    entries = entries.filter((s) => s.cwd === targetCwd);
+  }
+  if (entries.length === 0 && activeSessions.length === 0) {
+    console.log("No sessions found.");
+    return;
+  }
+  const rows = [];
+  const seen = new Set();
+  for (const s of entries) {
+    const active = activeByName.get(s.sessionName);
+    let status, pid, uptime;
+    if (active) {
+      seen.add(s.sessionName);
+      status = active.alive ? "running" : "stale";
+      pid = String(active.pid);
+      uptime = active.uptime;
+    } else {
+      status = "stopped";
+      pid = "-";
+      uptime = "-";
+    }
+    rows.push({ name: s.sessionName, model: s.model, status, pid, uptime, cwd: s.cwd });
+  }
+  for (const a of activeSessions) {
+    if (!seen.has(a.session_name)) {
+      rows.push({ name: a.session_name, model: a.model || "?", status: a.alive ? "running" : "stale", pid: String(a.pid), uptime: a.uptime, cwd: a.cwd });
+    }
+  }
+  const hdr = { name: "NAME", model: "MODEL", status: "STATUS", pid: "PID", uptime: "UPTIME", cwd: "CWD" };
+  const cols = ["name", "model", "status", "pid", "uptime", "cwd"];
+  const widths = {};
+  for (const c of cols) widths[c] = Math.max(hdr[c].length, ...rows.map((r) => String(r[c]).length));
+  const pad = (s, w) => String(s).padEnd(w);
+  console.log("  " + cols.map((c) => pad(hdr[c], widths[c])).join("  "));
+  for (const r of rows) {
+    console.log("  " + cols.map((c) => pad(r[c], widths[c])).join("  "));
+  }
+}
+
+async function cmdSessionStop(opts) {
+  if (!opts.sessionName) fail("session stop requires --name <name>");
+  const activeSessions = readAllActiveSessions();
+  const active = activeSessions.find((s) => s.session_name === opts.sessionName);
+  if (!active) {
+    const manifest = readManifest();
+    const inManifest = Object.values(manifest.sessions).find((s) => s.sessionName === opts.sessionName);
+    if (inManifest) {
+      console.log(`Session "${opts.sessionName}" exists but is not currently running.`);
+    } else {
+      fail(`Session "${opts.sessionName}" not found.`);
+    }
+    return;
+  }
+  if (!active.alive) {
+    removeActiveSession(opts, active.pid);
+    info(`Session "${opts.sessionName}" was not running (stale PID ${active.pid}). Cleaned up.`);
+    return;
+  }
+  const sig = opts.signal === "SIGKILL" ? "SIGKILL" : "SIGTERM";
+  try {
+    process.kill(-active.pid, sig);
+    info(`Sent ${sig} to session "${opts.sessionName}" (PID ${active.pid})`);
+  } catch (e) {
+    if (e.code === "ESRCH") {
+      info(`Process already exited.`);
+    } else {
+      try { process.kill(active.pid, sig); info(`Sent ${sig} to PID ${active.pid}`); }
+      catch (e2) { if (e2.code !== "ESRCH") fail(`Cannot kill PID ${active.pid}: ${e2.message}`); }
+    }
+  }
+  for (let i = 0; i < 10; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    if (!isPidAlive(active.pid)) break;
+  }
+  if (isPidAlive(active.pid)) {
+    if (sig !== "SIGKILL") {
+      console.log(`Process still alive after 5s. Try: superclaw session stop --name ${opts.sessionName} --signal SIGKILL`);
+    } else {
+      console.log(`Warning: PID ${active.pid} still alive after SIGKILL.`);
+    }
+  } else {
+    removeActiveSession(opts, active.pid);
+    info(`Stopped session: ${opts.sessionName} (PID ${active.pid})`);
+  }
+}
+
+async function cmdSessionClean(opts) {
+  const activeSessions = readAllActiveSessions();
+  const stale = activeSessions.filter((s) => !s.alive);
+  if (stale.length === 0) {
+    console.log("No stale sessions found.");
+    return;
+  }
+  for (const s of stale) {
+    if (opts.dryRun) {
+      console.log(`  [stale] ${s.session_name} (PID ${s.pid}, started ${s.start_time})`);
+    } else {
+      const sOpts = { sessionName: s.session_name };
+      removeActiveSession(sOpts, s.pid);
+      console.log(`  Cleaned: ${s.session_name} (PID ${s.pid})`);
+    }
+  }
+  if (opts.dryRun) {
+    console.log(`\nWould clean ${stale.length} stale session(s). Run without --dry-run to apply.`);
+  } else {
+    console.log(`\nCleaned ${stale.length} stale session(s).`);
+  }
 }
 
 async function cmdSessionShow(opts, acpx) {
@@ -959,8 +1137,21 @@ async function cmdUpdate(opts) {
   process.exit(status ?? 0);
 }
 
+/** Auto-clean stale active session files (dead PIDs from crashes/reboots). */
+function autoCleanStaleSessions() {
+  try {
+    const stale = readAllActiveSessions().filter((s) => !s.alive);
+    for (const s of stale) {
+      const sOpts = { sessionName: s.session_name };
+      removeActiveSession(sOpts, s.pid);
+    }
+    if (stale.length > 0) info(`auto-cleaned ${stale.length} stale session(s)`);
+  } catch { /* best-effort */ }
+}
+
 async function cmdExec(opts, acpx) {
   if (!opts.prompt) fail("exec requires --prompt <text>");
+  autoCleanStaleSessions();
   checkVersionDrift();
 
   const env = prepareInvocationEnv(opts);
@@ -985,6 +1176,7 @@ async function cmdExec(opts, acpx) {
 async function cmdSessionStart(opts, acpx) {
   if (!opts.sessionName) fail("session start requires --name <name>");
   if (!opts.prompt) fail("session start requires --prompt <text>");
+  autoCleanStaleSessions();
   checkVersionDrift();
 
   const env = prepareInvocationEnv(opts);
@@ -1038,6 +1230,7 @@ async function cmdSessionStart(opts, acpx) {
 async function cmdSessionContinue(opts, acpx) {
   if (!opts.sessionName) fail("session continue requires --name <name>");
   if (!opts.prompt) fail("session continue requires --prompt <text>");
+  autoCleanStaleSessions();
   checkVersionDrift();
 
   // Auto-resolve --cwd from manifest if not provided
@@ -1145,12 +1338,18 @@ async function main() {
         await cmdSessionShow(opts, acpx);
       } else if (opts.subcommand === "delete") {
         await cmdSessionDelete(opts);
+      } else if (opts.subcommand === "ps") {
+        await cmdSessionPs(opts);
+      } else if (opts.subcommand === "stop") {
+        await cmdSessionStop(opts);
+      } else if (opts.subcommand === "clean") {
+        await cmdSessionClean(opts);
       } else if (opts.subcommand === "start") {
         await cmdSessionStart(opts, acpx);
       } else if (opts.subcommand === "continue") {
         await cmdSessionContinue(opts, acpx);
       } else {
-        fail("Unknown session subcommand. Use: start, continue, show, delete, list");
+        fail("Unknown session subcommand. Use: start, continue, show, delete, list, ps, stop, clean");
       }
       break;
 
@@ -1162,22 +1361,24 @@ async function main() {
 
 // ─── Exports (for testing) ───────────────────────────────────────────────────
 
-export { parseArgs, ensureEnv, classifyPromptState, scopeKey, stripQuotes, validateEnvKey, validateEnvValue, prepareInvocationEnv, writeActiveSession, removeActiveSession };
+export { parseArgs, ensureEnv, classifyPromptState, scopeKey, stripQuotes, validateEnvKey, validateEnvValue, prepareInvocationEnv, writeActiveSession, removeActiveSession, isPidAlive, isPidOurs, formatUptime, readAllActiveSessions };
 
 // Only run main() when executed directly (not when imported for testing)
-const isMainModule = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isMainModule = process.argv[1] && realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url));
 if (isMainModule) {
   // ─── setsid self-re-exec ────────────────────────────────────────────────────
-  // When running under a service manager (systemd), cc-delegate is in the
+  // When running under a service manager (systemd), superclaw is in the
   // Gateway's cgroup.  If Gateway crashes, systemd sends SIGTERM to the entire
-  // cgroup, killing cc-delegate and its children.  To isolate, we re-exec
+  // cgroup, killing superclaw and its children.  To isolate, we re-exec
   // ourselves under `setsid` so the whole process tree is in its own session.
   //
   // Detection: SUPERCLAW_SETSID_DONE is set after the re-exec to avoid loops.
   // Skip for short commands (status, list, show) that don't spawn long-lived children.
   const needsIsolation = !process.env.SUPERCLAW_SETSID_DONE
     && process.argv.some((a) => a === "exec" || a === "session");
-  const isShortSubcommand = process.argv.some((a) => a === "status" || a === "list" || a === "show" || a === "version" || a === "update");
+  const isShortSubcommand = process.argv.some(
+    (a) => a === "status" || a === "list" || a === "show" || a === "ps" || a === "stop" || a === "clean" || a === "delete" || a === "version" || a === "update"
+  );
 
   if (needsIsolation && !isShortSubcommand) {
     // Load .env BEFORE re-exec so SUPERCLAW_* vars are in the child's environment
@@ -1195,7 +1396,7 @@ if (isMainModule) {
       });
       child.on("exit", (code) => process.exit(code ?? 1));
       child.on("error", (err) => {
-        process.stderr.write(`[cc-delegate] setsid re-exec failed: ${err.message}\n`);
+        process.stderr.write(`[superclaw] setsid re-exec failed: ${err.message}\n`);
         process.exit(1);
       });
     } else {
