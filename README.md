@@ -1,7 +1,7 @@
 # SuperClaw
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.2-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.1.3-green.svg)](CHANGELOG.md)
 [![Node >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org/)
 
 > **SuperClaw** is a harness-engineering project that connects [OpenClaw](https://github.com/openclaw/openclaw) (an AI assistant platform) with [Claude Code](https://docs.anthropic.com/en/docs/claude-code) to form a two-layer autonomous coding agent. The human sets direction, OpenClaw handles alignment and acceptance testing, and Claude Code handles execution. Built on top of [Superpowers](https://github.com/obra/superpowers).

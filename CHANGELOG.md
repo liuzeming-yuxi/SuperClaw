@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.1.2] - 2026-04-08
+## [0.1.3] - 2026-04-09
+
+### Added
+
+- **`superclaw claude`**: Pure pass-through to claude with `.env` loading + `IS_SANDBOX=1`. Replaces complex session resume logic
+- **`superclaw rm` supports multiple names**: `superclaw rm foo bar baz`
+
+### Changed
+
+- **Flat command structure**: Removed `session` subcommand layer entirely
+  - `exec` → `run`, `session start` → `start`, `session continue` → `send`
+  - `session show` → `show`, `session list/ps` → `ps`, `session stop` → `stop`
+  - `session delete` → `rm`, `session clean` → `clean`
+  - `--name` replaced by positional argument
+- **Removed `CLAUDE_CONFIG_DIR` override**: Sessions now write to native `~/.claude/`, making `claude --resume` work natively
+- **Model pinning via `--model` flag** instead of custom config directory
+
+### Removed
+
+- `session resume` command (use `superclaw claude --resume`)
+- `session list` command (merged into `ps`)
+- `CLAUDE_CONFIG_DIR` bootstrap / `pruneConfigOverrides` / Opus guardrail
+- `buildConfigOverride` and related hashing logic
+
 
 ### Added
 
