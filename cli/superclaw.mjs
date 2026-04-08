@@ -75,9 +75,8 @@ function validateEnvValue(key, val) {
 
 // ─── .env loader ─────────────────────────────────────────────────────────────
 
-function ensureEnv() {
-  // Always load .env (not just when required vars are missing) so that
-  // SUPERCLAW_* and other optional vars are available to child processes.
+function loadEnv() {
+  // Load .env into process.env (best-effort, no validation)
   if (existsSync(ENV_FILE)) {
     readFileSync(ENV_FILE, "utf8")
       .split("\n")
@@ -87,13 +86,14 @@ function ensureEnv() {
         const idx = l.indexOf("=");
         const key = l.slice(0, idx).trim();
         const val = stripQuotes(l.slice(idx + 1));
-        validateEnvKey(key);
-        validateEnvValue(key, val);
-        if (!process.env[key]) {
-          process.env[key] = val;
-        }
+        try { validateEnvKey(key); validateEnvValue(key, val); } catch { return; }
+        if (!process.env[key]) process.env[key] = val;
       });
   }
+}
+
+function ensureEnv() {
+  loadEnv();
   const required = ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"];
   const stillMissing = required.filter((k) => !process.env[k]);
   if (stillMissing.length > 0) {
@@ -834,7 +834,8 @@ async function cmdSessionClean(opts) {
 }
 
 async function cmdClaude(opts) {
-  // Pure pass-through: launch claude with IS_SANDBOX=1, forward all args after "claude"
+  // Load .env (ANTHROPIC_*, SUPERCLAW_*, IS_SANDBOX) then pass through to claude
+  loadEnv();
   const env = { ...process.env, IS_SANDBOX: "1" };
   const child = spawn("claude", opts.passthrough, {
     cwd: opts.cwd ? resolve(opts.cwd) : process.cwd(),
