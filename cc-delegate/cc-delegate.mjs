@@ -297,7 +297,7 @@ function startDelegateHeartbeat(opts) {
   heartbeatTimer = setInterval(() => {
     const elapsedMin = Math.round((Date.now() - startTime) / 60000);
 
-    const message = `📡 CC 进度 | ${sessionName} | ${cwdBase}\n⏱ 已运行 ${elapsedMin}m\n💭 (cc-delegate heartbeat — CC 可能在 thinking)`;
+    const message = `📡 CC 进度 | ${sessionName} | ${cwdBase}\n⏱ 已运行 ${elapsedMin}m`;
 
     // Fire and forget — don't block the event loop
     const cp = spawn(oclawPath, [
