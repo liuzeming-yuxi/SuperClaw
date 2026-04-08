@@ -1422,7 +1422,9 @@ if (isMainModule) {
     // Check if setsid is available
     const setsidProbe = spawnSync("setsid", ["--version"], { stdio: "ignore" });
     if (!setsidProbe.error) {
-      const scriptPath = fileURLToPath(import.meta.url);
+      // Use process.argv[1] (the symlink path, e.g. bin/superclaw.mjs) so the
+      // re-exec'd child resolves SCRIPT_DIR to the install directory, not the repo.
+      const scriptPath = resolve(process.argv[1]);
       const childEnv = { ...process.env, SUPERCLAW_SETSID_DONE: "1" };
       const child = spawn("setsid", ["node", scriptPath, ...process.argv.slice(2)], {
         stdio: "inherit",
