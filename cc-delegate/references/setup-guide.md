@@ -20,11 +20,11 @@ flags with acpx to auto-approve all tool calls without interactive prompts.
 bash skills/cc-delegate/scripts/setup.sh
 ```
 
-This installs the wrapper to `/root/cc-delegate/` and generates a `.env` template.
+This installs the wrapper to `/root/.openclaw/workspace/bin/` and generates a `.env` template.
 
 Then edit the `.env`:
 ```bash
-nano /root/cc-delegate/.env
+nano /root/.openclaw/workspace/bin/.env
 ```
 
 Fill in:
@@ -41,16 +41,16 @@ CC_DELEGATE_DIR=/opt/cc-delegate bash skills/cc-delegate/scripts/setup.sh
 
 1. Create the install directory:
    ```bash
-   mkdir -p /root/cc-delegate/state
+   mkdir -p /root/.openclaw/workspace/bin/state
    ```
 
-2. Copy `cc-delegate.mjs` to `/root/cc-delegate/`:
+2. Copy `cc-delegate.mjs` to `/root/.openclaw/workspace/bin/`:
    ```bash
-   cp cc-delegate/cc-delegate.mjs /root/cc-delegate/
-   chmod +x /root/cc-delegate/cc-delegate.mjs
+   cp cc-delegate/cc-delegate.mjs /root/.openclaw/workspace/bin/
+   chmod +x /root/.openclaw/workspace/bin/cc-delegate.mjs
    ```
 
-3. Create `/root/cc-delegate/.env`:
+3. Create `/root/.openclaw/workspace/bin/.env`:
    ```
    ANTHROPIC_BASE_URL=https://api.anthropic.com
    ANTHROPIC_AUTH_TOKEN=sk-your-token-here
@@ -59,7 +59,7 @@ CC_DELEGATE_DIR=/opt/cc-delegate bash skills/cc-delegate/scripts/setup.sh
 
 4. Set permissions:
    ```bash
-   chmod 600 /root/cc-delegate/.env
+   chmod 600 /root/.openclaw/workspace/bin/.env
    ```
 
 ## Why IS_SANDBOX=1?
@@ -75,11 +75,11 @@ via `su`, and avoids permission issues with project directories.
 
 ```bash
 # Should show status:
-node /root/cc-delegate/cc-delegate.mjs status
+node /root/.openclaw/workspace/bin/cc-delegate.mjs status
 
 # Smoke test (should create a file):
 mkdir -p /tmp/cc-test
-node /root/cc-delegate/cc-delegate.mjs exec --cwd /tmp/cc-test --prompt "Create hello.txt with content: it works"
+node /root/.openclaw/workspace/bin/cc-delegate.mjs exec --cwd /tmp/cc-test --prompt "Create hello.txt with content: it works"
 cat /tmp/cc-test/hello.txt
 ```
 

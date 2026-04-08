@@ -854,7 +854,7 @@ git push origin main
 export SUPERCLAW_FEISHU_TARGET="ou_your_open_id"
 
 # Run a short CC task
-node /root/cc-delegate/cc-delegate.mjs exec \
+node /root/.openclaw/workspace/bin/cc-delegate.mjs exec \
   --cwd /root/.openclaw/workspace/repos/superclaw \
   --model sonnet --timeout 60 \
   --prompt "Read the README.md and reply with a one-sentence summary"

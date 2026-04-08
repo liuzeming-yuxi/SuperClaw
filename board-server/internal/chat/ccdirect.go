@@ -10,13 +10,13 @@ import (
 
 // CCDirectBackend communicates with Claude Code via cc-delegate.
 type CCDirectBackend struct {
-	delegatePath string // /root/cc-delegate/cc-delegate.mjs
+	delegatePath string // /root/.openclaw/workspace/bin/cc-delegate.mjs
 }
 
 // NewCCDirectBackend creates a new CC direct backend.
 func NewCCDirectBackend(delegatePath string) *CCDirectBackend {
 	if delegatePath == "" {
-		delegatePath = "/root/cc-delegate/cc-delegate.mjs"
+		delegatePath = "/root/.openclaw/workspace/bin/cc-delegate.mjs"
 	}
 	return &CCDirectBackend{delegatePath: delegatePath}
 }

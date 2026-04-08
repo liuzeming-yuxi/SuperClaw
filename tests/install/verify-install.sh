@@ -87,8 +87,8 @@ echo ""
 
 echo "## cc-delegate Bridge"
 
-CC_DELEGATE="/root/cc-delegate/cc-delegate.mjs"
-CC_ENV="/root/cc-delegate/.env"
+CC_DELEGATE="/root/.openclaw/workspace/bin/cc-delegate.mjs"
+CC_ENV="/root/.openclaw/workspace/bin/.env"
 
 if [ -f "$CC_DELEGATE" ]; then
   pass "cc-delegate script exists"

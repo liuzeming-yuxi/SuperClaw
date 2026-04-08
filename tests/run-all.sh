@@ -48,7 +48,7 @@ run_suite "Hook: progress" "$SCRIPT_DIR/hooks/test-progress.sh"
 run_suite "Install verification" "$SCRIPT_DIR/install/verify-install.sh"
 
 # cc-delegate tests (requires cc-delegate installed)
-if [ -f "/root/cc-delegate/cc-delegate.mjs" ]; then
+if [ -f "/root/.openclaw/workspace/bin/cc-delegate.mjs" ]; then
   run_suite "cc-delegate: status" "$SCRIPT_DIR/cc-delegate/test-status.sh"
 else
   echo ""

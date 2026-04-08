@@ -42,7 +42,7 @@ sudo bash scripts/install.sh --skip-cc-delegate
 # 只装 skill，不配置 hooks
 bash scripts/install.sh --skip-cc-delegate --skip-hooks
 
-# 自定义 cc-delegate 安装路径（默认 /root/cc-delegate）
+# 自定义 cc-delegate 安装路径（默认 /root/.openclaw/workspace/bin）
 CC_DELEGATE_DIR=/opt/cc-delegate sudo bash scripts/install.sh
 
 # 预览模式（只打印，不执行）
@@ -56,10 +56,10 @@ bash scripts/install.sh --repo-dir /path/to/superclaw
 
 ### 1. cc-delegate 环境变量
 
-安装脚本会生成 `/root/cc-delegate/.env` 模板，你需要填入真实值：
+安装脚本会生成 `/root/.openclaw/workspace/bin/.env` 模板，你需要填入真实值：
 
 ```bash
-sudo nano /root/cc-delegate/.env
+sudo nano /root/.openclaw/workspace/bin/.env
 ```
 
 ```ini
@@ -119,7 +119,7 @@ bash tests/install/verify-install.sh
 | 符号链接断裂 | `ls -la ~/.openclaw/workspace/skills/superclaw/references/` |
 | Hook 没触发 | `jq '.hooks' ~/.claude/settings.json` |
 | 飞书没收到通知 | 检查 `$SUPERCLAW_FEISHU_TARGET` 和 `openclaw gateway status` |
-| cc-delegate 调不通 | `node /root/cc-delegate/cc-delegate.mjs status` |
+| cc-delegate 调不通 | `node /root/.openclaw/workspace/bin/cc-delegate.mjs status` |
 | Claude Code 权限问题 | 确认设置了 `IS_SANDBOX=1` 环境变量 |
 
 详细排查见 [cc-delegate 文档](cc-delegate/references/setup-guide.md)。
@@ -145,7 +145,7 @@ rm -rf ~/.superclaw
 1. 确认前置条件（`node --version`, `jq --version`, `openclaw --version`）
 2. 克隆仓库：`git clone https://github.com/liuzeming-yuxi/SuperClaw.git`
 3. 执行安装：`sudo bash scripts/install.sh`
-4. 编辑 `.env`：`sudo nano /root/cc-delegate/.env`
+4. 编辑 `.env`：`sudo nano /root/.openclaw/workspace/bin/.env`
 5. 验证：`bash tests/run-all.sh`
 
 不需要手动创建任何目录或符号链接，脚本全包了。

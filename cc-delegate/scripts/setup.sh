@@ -4,7 +4,7 @@
 # Runs as root — cc-delegate uses IS_SANDBOX=1 for yolo mode (no user switching needed).
 set -euo pipefail
 
-INSTALL_DIR="${CC_DELEGATE_DIR:-/root/cc-delegate}"
+INSTALL_DIR="${CC_DELEGATE_DIR:-/root/.openclaw/workspace/bin}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 info()  { printf '\033[1;34m[cc-delegate]\033[0m %s\n' "$1"; }
