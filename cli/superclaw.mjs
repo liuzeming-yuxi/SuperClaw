@@ -17,7 +17,16 @@ import process from "node:process";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+// SCRIPT_DIR must resolve to the *installed* location (where .env and state/ live),
+// not the repo source (which import.meta.url resolves to when symlinked).
+// process.argv[1] is the path the wrapper passes (e.g. /root/.openclaw/workspace/bin/superclaw.mjs),
+// which is the symlink path — dirname gives us the install directory.
+// SCRIPT_DIR = installed location (where .env and state/ live).
+// REPO_DIR = source repo location (where package.json lives).
+// When symlinked, process.argv[1] gives the install path, import.meta.url gives the repo path.
+const SCRIPT_DIR = process.argv[1] ? dirname(resolve(process.argv[1])) : dirname(fileURLToPath(import.meta.url));
+const SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
+const REPO_DIR = dirname(SOURCE_DIR); // cli/ → repo root
 const ENV_FILE = resolve(SCRIPT_DIR, ".env");
 const STATE_DIR = resolve(SCRIPT_DIR, "state");
 const CONFIG_ROOT = resolve(STATE_DIR, "claude-config");
@@ -976,7 +985,7 @@ function checkVersionDrift() {
     const installed = JSON.parse(readFileSync(INSTALLED_JSON_PATH, "utf8"));
     const installedCommit = (installed.commitFull || installed.commit || "").trim();
     if (!installedCommit) return;
-    const repoDir = installed.repoPath || dirname(SCRIPT_DIR);
+    const repoDir = installed.repoPath || REPO_DIR;
     const currentCommit = execSync("git rev-parse HEAD", {
       cwd: repoDir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
     }).trim();
@@ -1000,7 +1009,7 @@ async function cmdVersion() {
   } catch { /* ignore */ }
 
   // Read repo package.json for current version
-  const pkgPath = resolve(dirname(SCRIPT_DIR), "package.json");
+  const pkgPath = resolve(REPO_DIR, "package.json");
   let repoVersion = "unknown";
   try {
     const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
@@ -1008,7 +1017,7 @@ async function cmdVersion() {
   } catch { /* ignore */ }
 
   // Get current repo commit
-  const repoDir = (installed && installed.repoPath) || dirname(SCRIPT_DIR);
+  const repoDir = (installed && installed.repoPath) || REPO_DIR;
   let currentCommit = "unknown";
   try {
     currentCommit = execSync("git rev-parse --short HEAD", {
@@ -1056,7 +1065,7 @@ async function cmdVersion() {
 
 async function cmdUpdate(opts) {
   // Read installed.json for repoPath
-  let repoDir = dirname(SCRIPT_DIR);
+  let repoDir = REPO_DIR;
   try {
     if (existsSync(INSTALLED_JSON_PATH)) {
       const installed = JSON.parse(readFileSync(INSTALLED_JSON_PATH, "utf8"));
