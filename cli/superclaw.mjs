@@ -30,11 +30,8 @@ const SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_DIR = dirname(SOURCE_DIR); // cli/ → repo root
 const ENV_FILE = resolve(SCRIPT_DIR, ".env");
 const STATE_DIR = resolve(SCRIPT_DIR, "state");
-const CONFIG_ROOT = resolve(STATE_DIR, "claude-config");
 const MANIFEST_PATH = resolve(STATE_DIR, "sessions.json");
 const DEFAULT_SESSIONS_DIR = resolve(homedir(), ".superclaw", "state", "sessions");
-const CONFIG_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-const CONFIG_MAX_DIRS = 32;
 const MANIFEST_VERSION = 1;
 const BUFFER_MAX_BYTES = 64 * 1024 * 1024; // 64 MiB cap for captured stdout/stderr
 const INSTALLED_JSON_PATH = resolve(homedir(), ".superclaw", "installed.json");
@@ -385,55 +382,12 @@ function stopDelegateHeartbeat() {
   }
 }
 
-// ─── CLAUDE_CONFIG_DIR bootstrap (for model pinning) ─────────────────────────
-
-function buildConfigOverride(opts) {
-  if (opts.mode !== "session" || !opts.model) return null;
-
-  const scope = JSON.stringify({
-    cwd: resolve(opts.cwd || process.cwd()),
-    sessionName: opts.sessionName || "__default__",
-    model: opts.model,
-  });
-  const digest = createHash("sha1").update(scope).digest("hex").slice(0, 12);
-  const configDir = resolve(CONFIG_ROOT, digest);
-  const settingsPath = resolve(configDir, "settings.json");
-  return { configDir, settingsPath, settings: { model: opts.model } };
-}
+// ─── Invocation environment ─────────────────────────────���────────────────────
 
 function prepareInvocationEnv(opts) {
   const env = { ...process.env };
-  // Enable sandbox mode so Claude Code allows root execution
   env.IS_SANDBOX = "1";
-  const override = buildConfigOverride(opts);
-  if (!override) return env;
-
-  mkdirSync(dirname(override.settingsPath), { recursive: true });
-  writeFileSync(override.settingsPath, JSON.stringify(override.settings, null, 2) + "\n", "utf8");
-  pruneConfigOverrides(override.configDir);
-  env.CLAUDE_CONFIG_DIR = override.configDir;
   return env;
-}
-
-function pruneConfigOverrides(keepDir = null) {
-  let entries = [];
-  try {
-    entries = readdirSync(CONFIG_ROOT, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => {
-        const p = resolve(CONFIG_ROOT, e.name);
-        return { path: p, mtimeMs: statSync(p).mtimeMs };
-      })
-      .sort((a, b) => b.mtimeMs - a.mtimeMs);
-  } catch { return; }
-
-  const now = Date.now();
-  entries.forEach((entry, i) => {
-    if (keepDir && entry.path === keepDir) return;
-    if (now - entry.mtimeMs > CONFIG_MAX_AGE_MS || i >= CONFIG_MAX_DIRS) {
-      rmSync(entry.path, { recursive: true, force: true });
-    }
-  });
 }
 
 // ─── Opus session guardrail ──────────────────────────────────────────────────
@@ -566,6 +520,7 @@ function printUsage() {
     "  superclaw session stop --name <n> [--signal SIGTERM|SIGKILL]",
     "  superclaw session clean [--dry-run]",
     "  superclaw session resume --name <n> [-- <claude args>]",
+    "  superclaw claude [<claude args>]",
     "  superclaw status",
     "  superclaw version",
     "  superclaw update [--check]",
@@ -646,6 +601,11 @@ function parseArgs(argv) {
     if (arg === "update") {
       opts.command = "update";
       continue;
+    }
+    if (arg === "claude") {
+      opts.command = "claude";
+      opts.passthrough = [...args]; // everything after "claude" goes to claude
+      break;
     }
     if (arg === "doctor") {
       opts.command = "doctor";
@@ -873,73 +833,32 @@ async function cmdSessionClean(opts) {
   }
 }
 
+async function cmdClaude(opts) {
+  // Pure pass-through: launch claude with IS_SANDBOX=1, forward all args after "claude"
+  const env = { ...process.env, IS_SANDBOX: "1" };
+  const child = spawn("claude", opts.passthrough, {
+    cwd: opts.cwd ? resolve(opts.cwd) : process.cwd(),
+    env,
+    stdio: "inherit",
+  });
+  child.on("exit", (code) => process.exit(code ?? 1));
+  child.on("error", (err) => fail(`Failed to launch claude: ${err.message}`));
+}
+
 async function cmdSessionResume(opts) {
   if (!opts.sessionName) fail("session resume requires --name <name>");
 
-  // 1. Find session in manifest to get cwd and model
+  // Resolve cwd from manifest if not provided
   const manifest = readManifest();
   const entry = Object.values(manifest.sessions).find((s) => s.sessionName === opts.sessionName);
-  if (!entry) fail(`Session "${opts.sessionName}" not found in manifest.`);
+  const cwd = opts.cwd || entry?.cwd || process.cwd();
 
-  const cwd = opts.cwd || entry.cwd;
-  const model = entry.model || "opus";
+  info(`Resuming session in: ${cwd}`);
 
-  // 2. Compute config dir (same hash as buildConfigOverride)
-  const scope = JSON.stringify({
-    cwd: resolve(cwd),
-    sessionName: opts.sessionName,
-    model,
-  });
-  const digest = createHash("sha1").update(scope).digest("hex").slice(0, 12);
-  const configDir = resolve(CONFIG_ROOT, digest);
-
-  if (!existsSync(configDir)) {
-    fail(`Config directory not found: ${configDir}\nThis session may have been created with a different model or cwd.`);
-  }
-
-  // 3. Find session JSONL to extract Claude Code session ID
-  //    Claude Code stores sessions under projects/<slug>/<session-id>.jsonl
-  //    Slug is the absolute cwd with / and . replaced by -
-  const projectSlug = resolve(cwd).replace(/[/.]/g, "-");
-  const projectDir = resolve(configDir, "projects", projectSlug);
-  let sessionId = null;
-
-  // Try to find session JSONL in the projects dir
-  try {
-    const files = readdirSync(projectDir).filter((f) => f.endsWith(".jsonl"));
-    if (files.length === 1) {
-      sessionId = files[0].replace(".jsonl", "");
-    } else if (files.length > 1) {
-      // Pick the most recently modified
-      const sorted = files
-        .map((f) => ({ name: f, mtime: statSync(resolve(projectDir, f)).mtimeMs }))
-        .sort((a, b) => b.mtime - a.mtime);
-      sessionId = sorted[0].name.replace(".jsonl", "");
-    }
-  } catch {
-    // projectDir doesn't exist — try acpSessionId from manifest
-  }
-
-  // Fallback: use acpSessionId from manifest
-  if (!sessionId && entry.acpSessionId) {
-    sessionId = entry.acpSessionId;
-  }
-
-  if (!sessionId) {
-    fail(`Cannot determine Claude Code session ID for "${opts.sessionName}".`);
-  }
-
-  info(`Resuming session: ${opts.sessionName}`);
-  info(`  config: ${configDir}`);
-  info(`  session: ${sessionId}`);
-  info(`  cwd: ${cwd}`);
-  if (opts.passthrough.length > 0) {
-    info(`  claude args: ${opts.passthrough.join(" ")}`);
-  }
-
-  // 4. Exec claude --resume with the right CLAUDE_CONFIG_DIR
-  const claudeArgs = ["--resume", sessionId, ...opts.passthrough];
-  const env = { ...process.env, CLAUDE_CONFIG_DIR: configDir, IS_SANDBOX: "1" };
+  // Sessions now live in ~/.claude/ (no custom CLAUDE_CONFIG_DIR).
+  // Just launch claude --resume in the right cwd and let it find the session.
+  const claudeArgs = ["--resume", ...opts.passthrough];
+  const env = { ...process.env, IS_SANDBOX: "1" };
 
   const child = spawn("claude", claudeArgs, {
     cwd: resolve(cwd),
@@ -1288,7 +1207,7 @@ async function cmdSessionStart(opts, acpx) {
   checkVersionDrift();
 
   const env = prepareInvocationEnv(opts);
-  const commonArgs = buildCommonArgs(opts, { includeModel: false });
+  const commonArgs = buildCommonArgs(opts);
 
   // Bootstrap session
   const bootstrapArgs = buildBootstrapArgs(acpx.args, opts, commonArgs);
@@ -1350,11 +1269,8 @@ async function cmdSessionContinue(opts, acpx) {
     }
   }
 
-  // Enforce Opus guardrail
-  enforceOpusGuardrail(opts);
-
   const env = prepareInvocationEnv(opts);
-  const commonArgs = buildCommonArgs(opts, { includeModel: false });
+  const commonArgs = buildCommonArgs(opts);
 
   // Ensure session exists
   const bootstrapArgs = buildBootstrapArgs(acpx.args, opts, commonArgs);
@@ -1416,7 +1332,7 @@ async function main() {
   }
 
   // Step 2: Ensure env vars — skip for commands that don't need API credentials
-  const skipEnv = opts.command === "doctor" || opts.command === "version" || opts.subcommand === "resume";
+  const skipEnv = opts.command === "doctor" || opts.command === "version" || opts.command === "claude" || opts.subcommand === "resume";
   if (!skipEnv) {
     ensureEnv();
   }
@@ -1448,6 +1364,10 @@ async function main() {
       });
       process.exit(failCount > 0 ? 1 : 0);
     }
+
+    case "claude":
+      await cmdClaude(opts);
+      break;
 
     case "exec":
       await cmdExec(opts, acpx);
@@ -1501,7 +1421,7 @@ if (isMainModule) {
   const needsIsolation = !process.env.SUPERCLAW_SETSID_DONE
     && process.argv.some((a) => a === "exec" || a === "session");
   const isShortSubcommand = process.argv.some(
-    (a) => a === "status" || a === "list" || a === "show" || a === "ps" || a === "stop" || a === "clean" || a === "delete" || a === "version" || a === "update" || a === "doctor" || a === "resume"
+    (a) => a === "status" || a === "list" || a === "show" || a === "ps" || a === "stop" || a === "clean" || a === "delete" || a === "version" || a === "update" || a === "doctor" || a === "resume" || a === "claude"
   );
 
   if (needsIsolation && !isShortSubcommand) {
