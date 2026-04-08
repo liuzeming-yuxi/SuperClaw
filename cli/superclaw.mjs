@@ -304,7 +304,10 @@ function isPidOurs(pid, expectedStartTime) {
     const bootTimeSec = Date.now() / 1000 - uptime;
     const procStartMs = (bootTimeSec + startTicks / 100) * 1000;
     const expectedMs = new Date(expectedStartTime).getTime();
-    return Math.abs(procStartMs - expectedMs) < 2000;
+    // Process always starts BEFORE writeActiveSession records start_time.
+    // The gap can be 10-60s (acpx bootstrap). Allow up to 120s.
+    // Also guard against clock skew with a small future buffer.
+    return procStartMs <= expectedMs + 2000 && expectedMs - procStartMs < 120000;
   } catch {
     return true;
   }
