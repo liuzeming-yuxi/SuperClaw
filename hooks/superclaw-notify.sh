@@ -165,6 +165,24 @@ PID ${orphan_pid} 已不存在 | 已运行 ${orphan_elapsed}m"
         fi
       done
     fi
+
+    # ── System orphan scan: kill PPID=1 claude-agent-acp processes ─────────
+    # When Gateway crashes, CC processes become orphans (reparented to init).
+    # These consume memory indefinitely. Clean them up on each Stop event.
+    while IFS= read -r orphan_line; do
+      [[ -n "$orphan_line" ]] || continue
+      sys_pid=$(echo "$orphan_line" | awk '{print $1}')
+      sys_start=$(echo "$orphan_line" | awk '{print $5, $6, $7, $8, $9}')
+      # Don't kill processes less than 10 minutes old (might be starting up)
+      sys_elapsed_s=0
+      sys_start_epoch=$(date -d "$sys_start" +%s 2>/dev/null || echo "$NOW")
+      sys_elapsed_s=$((NOW - sys_start_epoch))
+      if [[ "$sys_elapsed_s" -gt 600 ]]; then
+        sys_elapsed_m=$((sys_elapsed_s / 60))
+        kill "$sys_pid" 2>/dev/null || true
+        send_feishu "🧹 清理孤儿 CC 进程 | PID ${sys_pid} | 已运行 ${sys_elapsed_m}m | PPID=1 (Gateway 崩溃遗留)"
+      fi
+    done < <(ps -eo pid,ppid,lstart,cmd 2>/dev/null | grep "claude-agent-acp" | grep -v grep | awk '$2 == 1 {print}')
     ;;
 
   *)
