@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# SuperClaw installer
+# SuperClaw installer — unified all-symlink installer
 # Usage: bash scripts/install.sh [options]
 #
 # Options:
 #   --repo-dir DIR       SuperClaw repo location (default: auto-detect from script location)
-#   --skip-cc-delegate   Skip cc-delegate installation (install OpenClaw skills + hooks only)
 #   --skip-hooks         Skip Claude Code hook configuration
 #   --dry-run            Print what would be done without doing it
 #   --help               Show this help
@@ -15,19 +14,19 @@
 
 set -euo pipefail
 
-# ─── Defaults ─────────────────────────────────────────────────────────────────
+# ─── Defaults ────────────────────────────────���────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-SKILL_DIR="${HOME}/.openclaw/workspace/skills/superclaw"
-CC_SKILL_DIR="${HOME}/.openclaw/workspace/skills/cc-delegate"
+SC_SKILL_DIR="${HOME}/.openclaw/workspace/skills/superclaw"
+CLI_SKILL_DIR="${HOME}/.openclaw/workspace/skills/superclaw-cli"
+BIN_DIR="${HOME}/.openclaw/workspace/bin"
 HOOKS_DIR="${HOME}/.superclaw/hooks"
 STATE_DIR="${HOME}/.superclaw/state"
-SKIP_CC_DELEGATE=false
 SKIP_HOOKS=false
 DRY_RUN=false
 
-# ─── Colors ───────────────────────────────────────────────────────────────────
+# ─── Colors ────────────────────────────────────────────────────��──────────────
 
 info()  { printf '\033[1;34m[superclaw]\033[0m %s\n' "$1"; }
 ok()    { printf '  \033[1;32m✅\033[0m %s\n' "$1"; }
@@ -40,7 +39,6 @@ step()  { printf '\n\033[1m## %s\033[0m\n\n' "$1"; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo-dir)       REPO_DIR="$2"; shift 2 ;;
-    --skip-cc-delegate) SKIP_CC_DELEGATE=true; shift ;;
     --skip-hooks)     SKIP_HOOKS=true; shift ;;
     --dry-run)        DRY_RUN=true; shift ;;
     --help)
@@ -59,10 +57,31 @@ run() {
   fi
 }
 
+# Create symlink, removing any existing file/link first.
+# Handles same-inode edge cases (hardlinks from previous cp-based installs,
+# overlayfs, or skill dir being a symlink into the repo tree).
+make_link() {
+  local src="$1" dst="$2"
+  if $DRY_RUN; then
+    echo "  [dry-run] ln -sfn $src $dst"
+    return
+  fi
+  # If dst already resolves to the same real path as src, skip
+  local real_src real_dst
+  real_src="$(readlink -f "$src" 2>/dev/null || true)"
+  real_dst="$(readlink -f "$dst" 2>/dev/null || true)"
+  if [[ -n "$real_src" ]] && [[ "$real_src" = "$real_dst" ]]; then
+    # Already pointing to the right place (or IS the same file)
+    return
+  fi
+  rm -f "$dst"
+  ln -sfn "$src" "$dst"
+}
+
 # Clean up temp files on exit
 cleanup() {
   local settings="${HOME}/.claude/settings.json.tmp"
-  [[ -f "$settings" ]] && rm -f "$settings"
+  [[ -f "$settings" ]] && rm -f "$settings" || true
 }
 trap cleanup EXIT
 
@@ -71,13 +90,6 @@ trap cleanup EXIT
 step "Preflight checks"
 
 ERRORS=0
-
-if ! command -v openclaw &>/dev/null; then
-  fail "OpenClaw not found in PATH"
-  ((ERRORS++)) || true
-else
-  ok "OpenClaw: $(openclaw --version 2>/dev/null || echo 'installed')"
-fi
 
 if ! command -v node &>/dev/null; then
   fail "Node.js not found in PATH"
@@ -100,12 +112,25 @@ else
   ok "jq: $(jq --version 2>/dev/null)"
 fi
 
+if ! command -v git &>/dev/null; then
+  fail "git not found in PATH"
+  ((ERRORS++)) || true
+else
+  ok "git: $(git --version 2>/dev/null)"
+fi
+
 if [[ ! -f "$REPO_DIR/package.json" ]]; then
   fail "SuperClaw repo not found at $REPO_DIR"
   ((ERRORS++)) || true
 else
   VERSION=$(jq -r '.version' "$REPO_DIR/package.json")
   ok "SuperClaw repo: $REPO_DIR (v$VERSION)"
+fi
+
+if ! command -v claude &>/dev/null; then
+  warn "Claude Code not found in PATH — install it before using SuperClaw"
+else
+  ok "Claude Code: $(claude --version 2>/dev/null || echo 'installed')"
 fi
 
 if [[ $ERRORS -gt 0 ]]; then
@@ -118,11 +143,19 @@ fi
 
 step "Part 1: OpenClaw Skills"
 
-run mkdir -p "$SKILL_DIR/references"
+# --- 1a: superclaw skill ---
 
-# Generate SKILL.md entry
-if ! $DRY_RUN; then
-cat > "$SKILL_DIR/SKILL.md" << 'SKILLEOF'
+run mkdir -p "$SC_SKILL_DIR/references"
+
+# SKILL.md — symlink to repo if it exists, otherwise generate inline
+SC_SKILL_SRC="$REPO_DIR/skills/superclaw/SKILL.md"
+if [[ -f "$SC_SKILL_SRC" ]]; then
+  make_link "$SC_SKILL_SRC" "$SC_SKILL_DIR/SKILL.md"
+  ok "Linked: superclaw SKILL.md → $SC_SKILL_SRC"
+else
+  # Generate inline SKILL.md (repo does not have skills/superclaw/SKILL.md yet)
+  if ! $DRY_RUN; then
+cat > "$SC_SKILL_DIR/SKILL.md" << 'SKILLEOF'
 ---
 name: superclaw
 description: |
@@ -161,15 +194,16 @@ OpenClaw + Claude Code 的超级编码体。人管方向，OpenClaw 管对齐和
 
 **默认从 align 开始。** 如果用户明确说"跳过 align，直接 plan"等，按用户指令走。
 SKILLEOF
+  fi
+  ok "Generated: $SC_SKILL_DIR/SKILL.md (inline)"
 fi
-ok "Created $SKILL_DIR/SKILL.md"
 
-# Symlink phase skills
+# Symlink phase skills into references/
 for phase in align plan execute verify deliver; do
   SRC="$REPO_DIR/skills/$phase/SKILL.md"
-  DST="$SKILL_DIR/references/$phase.md"
+  DST="$SC_SKILL_DIR/references/$phase.md"
   if [[ -f "$SRC" ]]; then
-    run ln -sf "$SRC" "$DST"
+    make_link "$SRC" "$DST"
     ok "Linked: $phase → $SRC"
   else
     fail "Source not found: $SRC"
@@ -178,12 +212,34 @@ done
 
 # Symlink meta-skill (using-superclaw teaches OpenClaw its role and boundaries)
 SRC="$REPO_DIR/skills/using-superclaw/SKILL.md"
-DST="$SKILL_DIR/references/using-superclaw.md"
+DST="$SC_SKILL_DIR/references/using-superclaw.md"
 if [[ -f "$SRC" ]]; then
-  run ln -sf "$SRC" "$DST"
+  make_link "$SRC" "$DST"
   ok "Linked: using-superclaw → $SRC"
 else
   fail "Source not found: $SRC"
+fi
+
+# --- 1b: superclaw-cli skill ---
+
+run mkdir -p "$CLI_SKILL_DIR/references"
+
+# Symlink SKILL.md
+CLI_SKILL_SRC="$REPO_DIR/cli/SKILL.md"
+if [[ -f "$CLI_SKILL_SRC" ]]; then
+  make_link "$CLI_SKILL_SRC" "$CLI_SKILL_DIR/SKILL.md"
+  ok "Linked: superclaw-cli SKILL.md → $CLI_SKILL_SRC"
+else
+  fail "Source not found: $CLI_SKILL_SRC"
+fi
+
+# Symlink setup-guide.md
+SETUP_GUIDE_SRC="$REPO_DIR/cli/references/setup-guide.md"
+if [[ -f "$SETUP_GUIDE_SRC" ]]; then
+  make_link "$SETUP_GUIDE_SRC" "$CLI_SKILL_DIR/references/setup-guide.md"
+  ok "Linked: setup-guide.md → $SETUP_GUIDE_SRC"
+else
+  fail "Source not found: $SETUP_GUIDE_SRC"
 fi
 
 # ─── Part 2: Hooks ───────────────────────────────────────────────────────────
@@ -196,14 +252,13 @@ else
   run mkdir -p "$HOOKS_DIR"
   run mkdir -p "$STATE_DIR"
 
-  # Copy hook scripts from repo
+  # Symlink hook scripts from repo (not copy!)
   for hook in superclaw-notify.sh superclaw-progress.sh; do
     SRC="$REPO_DIR/hooks/$hook"
     DST="$HOOKS_DIR/$hook"
     if [[ -f "$SRC" ]]; then
-      run cp "$SRC" "$DST"
-      run chmod +x "$DST"
-      ok "Installed hook: $hook"
+      make_link "$SRC" "$DST"
+      ok "Linked hook: $hook → $SRC"
     else
       fail "Hook source not found: $SRC"
     fi
@@ -213,17 +268,17 @@ else
   CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
 
   if [[ -f "$CLAUDE_SETTINGS" ]]; then
-    # Backup
-    run cp "$CLAUDE_SETTINGS" "${CLAUDE_SETTINGS}.bak.$(date +%s)"
-    ok "Backed up: $CLAUDE_SETTINGS"
-
     if ! $DRY_RUN; then
       # Check if hooks already configured (search nested .hooks[].hooks[].command)
-      STOP_EXISTS=$(jq -r '[.hooks.Stop[]?.hooks[]?.command // empty] | map(select(contains("superclaw"))) | length' "$CLAUDE_SETTINGS" 2>/dev/null)
-      PTU_EXISTS=$(jq -r '[.hooks.PostToolUse[]?.hooks[]?.command // empty] | map(select(contains("superclaw"))) | length' "$CLAUDE_SETTINGS" 2>/dev/null)
+      STOP_EXISTS=$(jq -r '[.hooks.Stop[]?.hooks[]?.command // empty] | map(select(contains("superclaw"))) | length' "$CLAUDE_SETTINGS" 2>/dev/null || echo "0")
+      PTU_EXISTS=$(jq -r '[.hooks.PostToolUse[]?.hooks[]?.command // empty] | map(select(contains("superclaw"))) | length' "$CLAUDE_SETTINGS" 2>/dev/null || echo "0")
       if [[ "${STOP_EXISTS:-0}" -gt 0 ]] && [[ "${PTU_EXISTS:-0}" -gt 0 ]]; then
-        warn "SuperClaw hooks already in settings.json — skipping"
+        ok "SuperClaw hooks already in settings.json — skipping"
       else
+        # Backup before modifying
+        run cp "$CLAUDE_SETTINGS" "${CLAUDE_SETTINGS}.bak.$(date +%s)"
+        ok "Backed up: $CLAUDE_SETTINGS"
+
         jq --arg notify "$HOOKS_DIR/superclaw-notify.sh" \
            --arg progress "$HOOKS_DIR/superclaw-progress.sh" \
            '.hooks = (.hooks // {}) |
@@ -245,49 +300,98 @@ else
   fi
 fi
 
-# ─── Part 3: cc-delegate ─────────────────────────────────────────────────────
+# ─── Part 3: CLI ─────────────────────────────────────────────────────────────
 
-if $SKIP_CC_DELEGATE; then
-  info "Skipping cc-delegate (--skip-cc-delegate)"
+step "Part 3: superclaw CLI"
+
+run mkdir -p "$BIN_DIR"
+run mkdir -p "$BIN_DIR/state"
+
+# Symlink superclaw.mjs (not copy!)
+CLI_SRC="$REPO_DIR/cli/superclaw.mjs"
+CLI_DST="$BIN_DIR/superclaw.mjs"
+if [[ -f "$CLI_SRC" ]]; then
+  make_link "$CLI_SRC" "$CLI_DST"
+  ok "Linked: superclaw.mjs → $CLI_SRC"
 else
-  step "Part 3: cc-delegate bridge"
+  fail "Source not found: $CLI_SRC"
+fi
 
-  # Delegate to the existing cc-delegate setup script
-  CC_SETUP="$REPO_DIR/cc-delegate/scripts/setup.sh"
+# Create wrapper script for short command name
+WRAPPER="/usr/local/bin/superclaw"
+if ! $DRY_RUN; then
+cat > "$WRAPPER" << WRAPEOF
+#!/bin/bash
+exec node "${BIN_DIR}/superclaw.mjs" "\$@"
+WRAPEOF
+  chmod +x "$WRAPPER"
+fi
+ok "Created wrapper: $WRAPPER"
 
-  if [[ -f "$CC_SETUP" ]]; then
-    info "Running cc-delegate setup..."
-    if $DRY_RUN; then
-      echo "  [dry-run] bash $CC_SETUP"
-    else
-      bash "$CC_SETUP"
-    fi
-  else
-    fail "cc-delegate setup script not found: $CC_SETUP"
+# Generate .env template if not exists
+ENV_FILE="${BIN_DIR}/.env"
+if [[ -f "${ENV_FILE}" ]]; then
+  warn ".env already exists at ${ENV_FILE} — not overwriting"
+else
+  if ! $DRY_RUN; then
+cat > "${ENV_FILE}" << 'ENVEOF'
+# Claude Code environment variables
+# Fill in your values and save.
+
+# API endpoint (your proxy or https://api.anthropic.com)
+ANTHROPIC_BASE_URL=https://api.anthropic.com
+
+# API key or auth token
+ANTHROPIC_AUTH_TOKEN=sk-your-token-here
+
+# Disable non-essential traffic (recommended for proxied setups)
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ENVEOF
+    ok "Created .env template at ${ENV_FILE}"
+    warn "Edit ${ENV_FILE} and fill in your ANTHROPIC_AUTH_TOKEN before use!"
   fi
+fi
 
-  # Install cc-delegate OpenClaw skill
-  run mkdir -p "$CC_SKILL_DIR/references" "$CC_SKILL_DIR/scripts"
-  for f in SKILL.md; do
-    [[ -f "$REPO_DIR/cc-delegate/$f" ]] && run cp "$REPO_DIR/cc-delegate/$f" "$CC_SKILL_DIR/$f"
-  done
-  [[ -f "$REPO_DIR/cc-delegate/references/setup-guide.md" ]] && \
-    run cp "$REPO_DIR/cc-delegate/references/setup-guide.md" "$CC_SKILL_DIR/references/"
-  [[ -f "$REPO_DIR/cc-delegate/cc-delegate.mjs" ]] && \
-    run cp "$REPO_DIR/cc-delegate/cc-delegate.mjs" "$CC_SKILL_DIR/scripts/"
-  [[ -f "$REPO_DIR/cc-delegate/scripts/setup.sh" ]] && \
-    run cp "$REPO_DIR/cc-delegate/scripts/setup.sh" "$CC_SKILL_DIR/scripts/"
-  ok "Installed cc-delegate skill to $CC_SKILL_DIR"
+if ! $DRY_RUN; then
+  chmod 600 "${ENV_FILE}"
+fi
+ok "Permissions set (${ENV_FILE} is 600)"
+
+# ─── Part 4: Version stamp ───────────────────────────────────────────────────
+
+step "Part 4: Version stamp"
+
+if ! $DRY_RUN; then
+  COMMIT_FULL=$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo "unknown")
+  COMMIT_SHORT=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+  INSTALLED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  mkdir -p "${HOME}/.superclaw"
+  cat > "${HOME}/.superclaw/installed.json" << STAMPEOF
+{
+  "version": "${VERSION}",
+  "commit": "${COMMIT_SHORT}",
+  "commitFull": "${COMMIT_FULL}",
+  "installedAt": "${INSTALLED_AT}",
+  "repoPath": "${REPO_DIR}",
+  "installer": "scripts/install.sh"
+}
+STAMPEOF
+  ok "Wrote ${HOME}/.superclaw/installed.json"
+else
+  echo "  [dry-run] write ${HOME}/.superclaw/installed.json"
 fi
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
 step "Installation complete"
 
-echo "  SuperClaw skill:    $SKILL_DIR"
-echo "  cc-delegate skill:  $CC_SKILL_DIR"
-echo "  Hooks:              $HOOKS_DIR"
-echo "  State:              $STATE_DIR"
+echo "  SuperClaw skill:     $SC_SKILL_DIR"
+echo "  superclaw-cli skill: $CLI_SKILL_DIR"
+echo "  CLI binary:          $BIN_DIR/superclaw.mjs"
+echo "  Hooks:               $HOOKS_DIR"
+echo "  State:               $STATE_DIR"
+echo "  Version stamp:       ${HOME}/.superclaw/installed.json"
 echo ""
 
 if [[ -z "${SUPERCLAW_FEISHU_TARGET:-}" ]]; then
