@@ -18,7 +18,7 @@ description: |
 
 <HARD-GATE>
 在用户 approve spec 之前，绝不进入下一阶段。
-绝不调用 cc-delegate 或任何执行工具。
+绝不调用 superclaw 或任何执行工具。
 绝不写代码。
 </HARD-GATE>
 

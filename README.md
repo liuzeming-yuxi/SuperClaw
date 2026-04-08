@@ -149,8 +149,8 @@ superclaw/
 │   ├── verify/SKILL.md          # Phase 4-L2: 验收
 │   └── deliver/SKILL.md         # Phase 5: 交付
 │
-├── cc-delegate/                 # OpenClaw → Claude Code 桥接层
-│   ├── cc-delegate.mjs          # 核心脚本（679 行）
+├── cli/                        # OpenClaw → Claude Code 桥接层
+│   ├── superclaw.mjs          # 核心脚本（679 行）
 │   ├── SKILL.md                 # OpenClaw skill 定义
 │   ├── .env.example             # 环境变量模板
 │   ├── references/              # 安装指南
@@ -174,7 +174,7 @@ superclaw/
 │   ├── run-all.sh               # 运行所有测试
 │   ├── install/                 # 安装验证
 │   ├── hooks/                   # Hook 测试
-│   ├── cc-delegate/             # 桥接层测试
+│   ├── cli/                    # 桥接层测试
 │   └── e2e/                     # 端到端测试
 │
 └── .github/                     # Issue + PR templates

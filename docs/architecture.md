@@ -19,7 +19,7 @@
 │  │align│→ │plan │→ │execute │→ │verify│→ │deliver│
 │  └─────┘  └─────┘  └────┬───┘  └──────┘  └─────┘│
 │                          │                        │
-│  cc-delegate bridge      │                        │
+│  superclaw bridge      │                        │
 └──────────────────────────┼────────────────────────┘
                            │ ACPX protocol
                            ▼
@@ -73,7 +73,7 @@
 | 组件 | 技术 |
 |---|---|
 | OpenClaw | Node.js, OpenClaw plugin system |
-| cc-delegate | Node.js (ESM), ACPX protocol |
+| superclaw | Node.js (ESM), ACPX protocol |
 | Claude Code | Anthropic Claude, Superpowers plugin |
 | Hooks | Bash, jq, `openclaw message send` |
 | 通知 | Feishu (飞书) |

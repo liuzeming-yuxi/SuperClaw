@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Unit tests for cc-delegate.mjs pure logic functions
+// Unit tests for superclaw.mjs pure logic functions
 // Uses node:test and node:assert (Node.js 18+)
 
 import { describe, it, beforeEach, afterEach } from "node:test";
@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { parseArgs, classifyPromptState, scopeKey, stripQuotes, validateEnvValue, writeActiveSession, removeActiveSession } from "../../cc-delegate/cc-delegate.mjs";
+import { parseArgs, classifyPromptState, scopeKey, stripQuotes, validateEnvValue, writeActiveSession, removeActiveSession } from "../../cli/superclaw.mjs";
 
 // ─── stripQuotes ────────────────────────────────────────────────────────────
 
@@ -247,7 +247,7 @@ describe("writeActiveSession / removeActiveSession", () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(resolve(tmpdir(), "cc-delegate-test-"));
+    tmpDir = mkdtempSync(resolve(tmpdir(), "superclaw-test-"));
   });
 
   afterEach(() => {

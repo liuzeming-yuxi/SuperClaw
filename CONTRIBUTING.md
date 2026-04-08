@@ -18,10 +18,10 @@ Thanks for your interest in contributing!
 ## Project Structure
 
 - `skills/` — OpenClaw-side skill definitions (one per phase)
-- `cc-delegate/` — Bridge layer between OpenClaw and Claude Code
+- `cli/` — Bridge layer between OpenClaw and Claude Code
 - `hooks/` — Claude Code hook scripts
 - `commands/` — Quick skill invocation commands
-- `tests/` — Test suite (install, hooks, cc-delegate, e2e)
+- `tests/` — Test suite (install, hooks, superclaw, e2e)
 - `docs/` — Design docs and architecture notes
 
 ## Reporting Issues

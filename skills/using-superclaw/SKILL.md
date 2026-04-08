@@ -4,7 +4,7 @@ description: |
   Meta-skill that teaches OpenClaw its role and boundaries in the SuperClaw system.
   Use at the start of any conversation that might involve coding tasks.
   Establishes: what you are, what you're not, when to activate the workflow,
-  and how to interact with Claude Code through the cc-delegate bridge.
+  and how to interact with Claude Code through the superclaw bridge.
 ---
 
 # Using SuperClaw
@@ -153,9 +153,9 @@ session 命名：`superclaw-<feature>`（不带阶段前缀）。
 2. **SuperClaw skill 规则** — 覆盖你的默认行为
 3. **你的默认判断** — 最低
 
-## cc-delegate 使用规则
+## superclaw 使用规则
 
-通过 cc-delegate 与 Claude Code 通信。核心规则：
+通过 superclaw 与 Claude Code 通信。核心规则：
 
 - **exec**：一次性任务（plan 生成、快速验证）— **禁止用于 execute 阶段**
 - **session start**：开始一个新的开发任务 — **execute 阶段必须用这个**
@@ -166,35 +166,35 @@ session 命名：`superclaw-<feature>`（不带阶段前缀）。
 
 ### exec timeout 铁律
 
-调 cc-delegate 时，**必须给 exec tool 设置足够的 timeout**。默认 5 秒会导致 cc-delegate 被提前杀掉。
+调 superclaw 时，**必须给 exec tool 设置足够的 timeout**。默认 5 秒会导致 superclaw 被提前杀掉。
 
 ```bash
 # 短任务（< 5 分钟）
-exec timeout=300: cc-delegate exec --timeout 300 --prompt "..."
+exec timeout=300: superclaw exec --timeout 300 --prompt "..."
 
 # 长任务（5-40 分钟，典型的 execute 阶段）
-exec timeout=2400: cc-delegate exec --timeout 2400 --prompt "..."
+exec timeout=2400: superclaw exec --timeout 2400 --prompt "..."
 ```
 
-**exec timeout 必须 >= cc-delegate 的 --timeout 值。**
+**exec timeout 必须 >= superclaw 的 --timeout 值。**
 
 ### 长任务监控
 
 CC 跑长任务时，定期检查是否还活着：
 
 ```bash
-exec timeout=5: pgrep -fa "cc-delegate\|acpx\|claude" | head -5
+exec timeout=5: pgrep -fa "superclaw\|acpx\|claude" | head -5
 exec timeout=5: tail -5 ~/.superclaw/state/tool_log.jsonl
 ```
 
 CC 完成后，查看产出：
 ```bash
-exec timeout=30: cc-delegate session show --name <name> --cwd <path> --last 3
+exec timeout=30: superclaw session show --name <name> --cwd <path> --last 3
 ```
 
 ### 已知问题：用户 /stop 导致 Gateway 崩溃
 
-如果用户在 CC 执行期间发 /stop 或 /new，Gateway 可能因 exec supervisor stdout listener 未清理而崩溃（`Agent listener invoked outside active run`）。cc-delegate 已通过 setsid 进程隔离做了防御，但最好**不要在 CC 执行期间 abort agent run**。如果必须中断，先 kill CC 进程，再 /stop。
+如果用户在 CC 执行期间发 /stop 或 /new，Gateway 可能因 exec supervisor stdout listener 未清理而崩溃（`Agent listener invoked outside active run`）。superclaw 已通过 setsid 进程隔离做了防御，但最好**不要在 CC 执行期间 abort agent run**。如果必须中断，先 kill CC 进程，再 /stop。
 
 ## 最后
 

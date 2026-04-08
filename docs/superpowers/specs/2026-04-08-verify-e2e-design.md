@@ -102,7 +102,7 @@ execute 完成 → OpenClaw 收到通知
 
 ```
 OpenClaw 发现问题
-  → cc-delegate session continue --name superclaw-<feature>
+  → superclaw session continue --name superclaw-<feature>
   → prompt:
     "验收发现以下问题，请使用 superpowers:systematic-debugging 修复：
 

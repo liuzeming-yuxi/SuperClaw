@@ -42,7 +42,7 @@ Plan 必须经过 review 才能执行。
 ## Checklist
 
 1. **准备上下文** — 收集 spec + 项目结构 + 关键文件
-2. **发起 Claude Code session** — 通过 cc-delegate 启动，传入 spec
+2. **发起 Claude Code session** — 通过 superclaw 启动，传入 spec
 3. **Claude Code 探索代码库** — 读代码、理解现有架构
 4. **Claude Code 出 plan 草案** — 使用 Superpowers writing-plans skill
 5. **OpenClaw review plan** — 检查 spec 覆盖、任务粒度、风险点
@@ -54,7 +54,7 @@ Plan 必须经过 review 才能执行。
 ```
 收到 approved spec
   → 准备上下文（spec + 代码结构 + 关键文件）
-  → cc-delegate session start（传入 spec + writing-plans 指令）
+  → superclaw session start（传入 spec + writing-plans 指令）
   → Claude Code 探索代码库 + 出 plan 草案
   → OpenClaw review plan
       ├─ 有问题 → 发修改意见给 CC → CC 修改 → 重新 review（循环）
@@ -75,10 +75,10 @@ Plan 必须经过 review 才能执行。
 
 ## 发起 Claude Code Session
 
-通过 cc-delegate 启动 Claude Code：
+通过 superclaw 启动 Claude Code：
 
 ```bash
-cc-delegate session start \
+superclaw session start \
   --name "superclaw-<feature>" \
   --cwd <project-dir> \
   --prompt "
@@ -118,7 +118,7 @@ Claude Code 出 plan 后，OpenClaw 独立检查：
 ### Review 结果
 
 - **通过** → 进入人类 review gate
-- **有问题** → `cc-delegate session continue --name "superclaw-<feature>"` 发修改意见 → CC 修改 → 重新 review
+- **有问题** → `superclaw session continue --name "superclaw-<feature>"` 发修改意见 → CC 修改 → 重新 review
 
 ## 人类 Review Gate
 

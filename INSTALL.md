@@ -30,20 +30,20 @@ sudo bash scripts/install.sh
 - 创建 OpenClaw skill 目录 + 符号链接
 - 部署 hook 脚本到 `~/.superclaw/hooks/`
 - 配置 Claude Code settings.json 的 hooks
-- 部署 cc-delegate 桥接脚本（以 root + IS_SANDBOX=1 模式运行）
-- 安装 cc-delegate OpenClaw skill
+- 部署 superclaw 桥接脚本（以 root + IS_SANDBOX=1 模式运行）
+- 安装 superclaw OpenClaw skill
 
 ## 安装选项
 
 ```bash
-# 只装 OpenClaw 侧（跳过 cc-delegate，比如已经装过）
-sudo bash scripts/install.sh --skip-cc-delegate
+# 只装 OpenClaw 侧（跳过 superclaw，比如已经装过）
+sudo bash scripts/install.sh --skip-superclaw
 
 # 只装 skill，不配置 hooks
-bash scripts/install.sh --skip-cc-delegate --skip-hooks
+bash scripts/install.sh --skip-superclaw --skip-hooks
 
-# 自定义 cc-delegate 安装路径（默认 /root/.openclaw/workspace/bin）
-CC_DELEGATE_DIR=/opt/cc-delegate sudo bash scripts/install.sh
+# 自定义 superclaw 安装路径（默认 /root/.openclaw/workspace/bin）
+SUPERCLAW_CLI_DIR=/opt/superclaw sudo bash scripts/install.sh
 
 # 预览模式（只打印，不执行）
 bash scripts/install.sh --dry-run
@@ -54,7 +54,7 @@ bash scripts/install.sh --repo-dir /path/to/superclaw
 
 ## 安装后配置
 
-### 1. cc-delegate 环境变量
+### 1. superclaw 环境变量
 
 安装脚本会生成 `/root/.openclaw/workspace/bin/.env` 模板，你需要填入真实值：
 
@@ -115,21 +115,21 @@ bash tests/install/verify-install.sh
 
 | 症状 | 检查 |
 |---|---|
-| OpenClaw 不认识 superclaw skill | `ls ~/.openclaw/workspace/skills/superclaw/SKILL.md` |
-| 符号链接断裂 | `ls -la ~/.openclaw/workspace/skills/superclaw/references/` |
+| OpenClaw 不认识 superclaw skill | `ls ~/.openclaw/workspace/skills/superclaw-cli/SKILL.md` |
+| 符号链接断裂 | `ls -la ~/.openclaw/workspace/skills/superclaw-cli/references/` |
 | Hook 没触发 | `jq '.hooks' ~/.claude/settings.json` |
 | 飞书没收到通知 | 检查 `$SUPERCLAW_FEISHU_TARGET` 和 `openclaw gateway status` |
-| cc-delegate 调不通 | `node /root/.openclaw/workspace/bin/cc-delegate.mjs status` |
+| superclaw 调不通 | `node /root/.openclaw/workspace/bin/superclaw.mjs status` |
 | Claude Code 权限问题 | 确认设置了 `IS_SANDBOX=1` 环境变量 |
 
-详细排查见 [cc-delegate 文档](cc-delegate/references/setup-guide.md)。
+详细排查见 [superclaw 文档](superclaw/references/setup-guide.md)。
 
 ## 卸载
 
 ```bash
 # 移除 OpenClaw skills
 rm -rf ~/.openclaw/workspace/skills/superclaw
-rm -rf ~/.openclaw/workspace/skills/cc-delegate
+rm -rf ~/.openclaw/workspace/skills/superclaw
 
 # 移除 hooks
 rm -rf ~/.superclaw

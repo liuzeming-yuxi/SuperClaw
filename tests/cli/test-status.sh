@@ -1,9 +1,9 @@
 #!/bin/bash
-# Test cc-delegate basic commands
+# Test superclaw basic commands
 #
-# Usage: bash tests/cc-delegate/test-status.sh
+# Usage: bash tests/cli/test-status.sh
 #
-# Prerequisites: cc-delegate installed at /root/.openclaw/workspace/bin/
+# Prerequisites: superclaw installed at /root/.openclaw/workspace/bin/
 
 set -euo pipefail
 
@@ -13,19 +13,19 @@ FAIL=0
 pass() { echo "  ✅ $1"; ((PASS++)) || true; }
 fail() { echo "  ❌ $1"; ((FAIL++)) || true; }
 
-CC_DELEGATE="/root/.openclaw/workspace/bin/cc-delegate.mjs"
+SUPERCLAW_CLI="/root/.openclaw/workspace/bin/superclaw.mjs"
 
-echo "🧪 Testing cc-delegate status"
+echo "🧪 Testing superclaw status"
 echo ""
 
 # ─── Test 1: Script exists and is executable ───
 
 echo "Test 1: Script exists"
 
-if [ -f "$CC_DELEGATE" ]; then
-  pass "cc-delegate.mjs exists"
+if [ -f "$SUPERCLAW_CLI" ]; then
+  pass "superclaw.mjs exists"
 else
-  fail "cc-delegate.mjs not found"
+  fail "superclaw.mjs not found"
   echo "Results: ✅ $PASS passed | ❌ $FAIL failed"
   exit 1
 fi
@@ -34,7 +34,7 @@ fi
 
 echo "Test 2: Status command"
 
-OUTPUT=$(node "$CC_DELEGATE" status 2>&1) || true
+OUTPUT=$(node "$SUPERCLAW_CLI" status 2>&1) || true
 
 if echo "$OUTPUT" | grep -qi "claude\|version\|status\|ready"; then
   pass "Status command returned meaningful output"
@@ -69,7 +69,7 @@ fi
 echo "Test 4: Session list"
 
 EXIT_CODE=0
-OUTPUT=$(node "$CC_DELEGATE" session list 2>&1) || EXIT_CODE=$?
+OUTPUT=$(node "$SUPERCLAW_CLI" session list 2>&1) || EXIT_CODE=$?
 
 if [ $EXIT_CODE -eq 0 ] || echo "$OUTPUT" | grep -qi "session\|no.*session\|empty\|\[\]"; then
   pass "Session list command works"

@@ -1,5 +1,5 @@
 ---
-name: cc-delegate
+name: superclaw
 description: |
   Delegate coding tasks to Claude Code via ACPX from OpenClaw. Runs Claude Code as root with
   IS_SANDBOX=1 bypass, full file-write permissions, Opus model support, and persistent named sessions.
@@ -15,7 +15,7 @@ description: |
   non-coding tasks, or tasks that don't need file system access.
 ---
 
-# cc-delegate
+# superclaw
 
 Delegate coding tasks to Claude Code via ACPX. The wrapper handles user switching, env injection,
 session management, and Opus model pinning automatically.
@@ -34,8 +34,8 @@ See `references/setup-guide.md` for details or manual setup.
 ## Configuration
 
 The wrapper runs as root with `IS_SANDBOX=1` to bypass Claude Code's root restriction.
-The wrapper script lives at `/root/.openclaw/workspace/bin/cc-delegate.mjs` by default.
-Override the install path with `CC_DELEGATE_DIR` env var during setup.
+The wrapper script lives at `/root/.openclaw/workspace/bin/superclaw.mjs` by default.
+Override the install path with `SUPERCLAW_CLI_DIR` env var during setup.
 
 ## Commands
 
@@ -44,7 +44,7 @@ All commands run as root with IS_SANDBOX=1. Run via `exec`.
 ### One-shot task (exec)
 
 ```bash
-cc-delegate exec \
+superclaw exec \
   --cwd /path/to/project \
   --prompt "your coding task description"
 ```
@@ -54,7 +54,7 @@ Default model is `opus`. Override with `--model sonnet`.
 ### Start a named session
 
 ```bash
-cc-delegate session start \
+superclaw session start \
   --name my-session \
   --cwd /path/to/project \
   --prompt "initial task"
@@ -66,7 +66,7 @@ and records the session in a local manifest for tracking.
 ### Continue a session
 
 ```bash
-cc-delegate session continue \
+superclaw session continue \
   --name my-session \
   --cwd /path/to/project \
   --prompt "next task"
@@ -78,7 +78,7 @@ originally created through the wrapper can be continued (prevents model drift).
 ### List sessions
 
 ```bash
-cc-delegate session list
+superclaw session list
 ```
 
 ### Show session context
@@ -86,7 +86,7 @@ cc-delegate session list
 View the full conversation history of a session in Markdown format:
 
 ```bash
-cc-delegate session show \
+superclaw session show \
   --name my-session \
   --cwd /path/to/project
 ```
@@ -94,7 +94,7 @@ cc-delegate session show \
 Show only the last N turns:
 
 ```bash
-cc-delegate session show \
+superclaw session show \
   --name my-session \
   --cwd /path/to/project \
   --last 5
@@ -103,7 +103,7 @@ cc-delegate session show \
 ### Check status
 
 ```bash
-cc-delegate status
+superclaw status
 ```
 
 ## Workflow
@@ -136,7 +136,7 @@ For session workflows:
 ## Architecture
 
 ```
-OpenClaw (root) → exec node cc-delegate.mjs ...
+OpenClaw (root) → exec node superclaw.mjs ...
   → sets IS_SANDBOX=1 (bypasses Claude Code root restriction)
     → loads .env, injects ANTHROPIC_* vars
       → resolves acpx (local or npx fallback)
@@ -160,17 +160,17 @@ CC tasks (especially Opus with large codebases) can run 10-40 minutes. Follow th
 
 ### CRITICAL: exec timeout
 
-When calling cc-delegate via the `exec` tool, you **MUST** set a sufficient timeout:
+When calling superclaw via the `exec` tool, you **MUST** set a sufficient timeout:
 
 ```bash
-# BAD — default 5s timeout will kill cc-delegate immediately
-exec: cc-delegate exec --prompt "..."
+# BAD — default 5s timeout will kill superclaw immediately
+exec: superclaw exec --prompt "..."
 
 # GOOD — set exec timeout to match --timeout
-exec timeout=2400: cc-delegate exec --timeout 2400 --prompt "..."
+exec timeout=2400: superclaw exec --timeout 2400 --prompt "..."
 ```
 
-The `exec` tool timeout and cc-delegate's `--timeout` are DIFFERENT things:
+The `exec` tool timeout and superclaw's `--timeout` are DIFFERENT things:
 - `exec timeout=N` — how long OpenClaw waits for the command to finish
 - `--timeout N` — how long CC is allowed to run
 
@@ -180,21 +180,21 @@ The `exec` tool timeout and cc-delegate's `--timeout` are DIFFERENT things:
 
 **Short tasks (< 5 min):**
 ```bash
-exec timeout=300: cc-delegate exec \
+exec timeout=300: superclaw exec \
   --cwd /path/to/project --model sonnet --timeout 300 \
   --prompt "simple task"
 ```
 
 **Long tasks (5-40 min):**
 ```bash
-exec timeout=2400: cc-delegate exec \
+exec timeout=2400: superclaw exec \
   --cwd /path/to/project --model opus --timeout 2400 \
   --prompt "complex task"
 ```
 
 **Very long tasks (> 40 min) — fire and forget:**
 ```bash
-exec timeout=10: setsid cc-delegate exec \
+exec timeout=10: setsid superclaw exec \
   --cwd /path/to/project --model opus --timeout 7200 \
   --file /tmp/prompt.md > /tmp/cc-output.log 2>&1 &
 echo "CC started, PID=$!"
@@ -208,7 +208,7 @@ exec timeout=5: tail -20 /tmp/cc-output.log
 
 Check if CC is still alive:
 ```bash
-exec timeout=5: pgrep -fa "cc-delegate\|acpx\|claude" | head -10
+exec timeout=5: pgrep -fa "superclaw\|acpx\|claude" | head -10
 ```
 
 Check recent tool activity:
@@ -218,23 +218,23 @@ exec timeout=5: tail -5 ~/.superclaw/state/tool_log.jsonl
 
 View session context after completion:
 ```bash
-exec timeout=30: cc-delegate session show \
+exec timeout=30: superclaw session show \
   --name my-session --cwd /path/to/project --last 5
 ```
 
 ## Known Issue: Gateway crash on /stop during CC execution
 
-**Symptom**: When the user runs `/stop` or `/new` while cc-delegate is executing, the Gateway crashes with:
+**Symptom**: When the user runs `/stop` or `/new` while superclaw is executing, the Gateway crashes with:
 
 ```
 Unhandled promise rejection: Error: Agent listener invoked outside active run
     at Agent.processEvents (pi-agent-core/src/agent.ts:533:10)
 ```
 
-**Root cause**: OpenClaw's exec supervisor does not detach the stdout listener when the agent run is aborted. When cc-delegate continues to output to stdout after the run ends, the stale listener triggers `processEvents` which throws because the run is no longer active. This unhandled rejection crashes the Gateway, and systemd sends SIGTERM to the entire cgroup.
+**Root cause**: OpenClaw's exec supervisor does not detach the stdout listener when the agent run is aborted. When superclaw continues to output to stdout after the run ends, the stale listener triggers `processEvents` which throws because the run is no longer active. This unhandled rejection crashes the Gateway, and systemd sends SIGTERM to the entire cgroup.
 
-**Mitigation (cc-delegate side)**:
-- cc-delegate auto-re-execs under `setsid`, creating an independent session group
+**Mitigation (superclaw side)**:
+- superclaw auto-re-execs under `setsid`, creating an independent session group
 - Child processes spawned with `detached: true`
 - These prevent Gateway's SIGTERM from killing the CC process tree
 

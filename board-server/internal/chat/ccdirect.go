@@ -8,20 +8,20 @@ import (
 	"strings"
 )
 
-// CCDirectBackend communicates with Claude Code via cc-delegate.
+// CCDirectBackend communicates with Claude Code via superclaw.
 type CCDirectBackend struct {
-	delegatePath string // /root/.openclaw/workspace/bin/cc-delegate.mjs
+	delegatePath string // /root/.openclaw/workspace/bin/superclaw.mjs
 }
 
 // NewCCDirectBackend creates a new CC direct backend.
 func NewCCDirectBackend(delegatePath string) *CCDirectBackend {
 	if delegatePath == "" {
-		delegatePath = "/root/.openclaw/workspace/bin/cc-delegate.mjs"
+		delegatePath = "/root/.openclaw/workspace/bin/superclaw.mjs"
 	}
 	return &CCDirectBackend{delegatePath: delegatePath}
 }
 
-// Stream sends a prompt via cc-delegate and streams stdout back.
+// Stream sends a prompt via superclaw and streams stdout back.
 // isNew indicates whether to use "session start" or "session continue".
 func (b *CCDirectBackend) Stream(ctx context.Context, sessionName, cwd, prompt string, isNew bool, onChunk func(string)) (string, error) {
 	var args []string
@@ -48,7 +48,7 @@ func (b *CCDirectBackend) Stream(ctx context.Context, sessionName, cwd, prompt s
 	}
 
 	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("启动 cc-delegate 失败: %w", err)
+		return "", fmt.Errorf("启动 superclaw 失败: %w", err)
 	}
 
 	var fullReply strings.Builder
@@ -66,7 +66,7 @@ func (b *CCDirectBackend) Stream(ctx context.Context, sessionName, cwd, prompt s
 		if fullReply.Len() > 0 {
 			return fullReply.String(), nil
 		}
-		return "", fmt.Errorf("cc-delegate 执行失败: %w", err)
+		return "", fmt.Errorf("superclaw 执行失败: %w", err)
 	}
 
 	return fullReply.String(), nil

@@ -249,7 +249,7 @@ L — 约 3-4 个执行 session。主要工作在 CLI 工具 + 测试。
 1. Stop hook 写 `last_event.json`，包含 `status: "interrupted"` 字段
 2. OpenClaw 下次检查时发现任务仍在 `executing/` 但 session 已结束
 3. 读取 `tool_log.jsonl` 判断进度
-4. 选择：恢复执行（`cc-delegate session continue`）、移到 blocked、移回 planned 重新规划
+4. 选择：恢复执行（`superclaw session continue`）、移到 blocked、移回 planned 重新规划
 
 ### Phase 4: Verify
 
@@ -283,7 +283,7 @@ L — 约 3-4 个执行 session。主要工作在 CLI 工具 + 测试。
 4. 修改 execute skill：增加 board 移动 + 崩溃恢复逻辑
 5. 修改 verify skill：增加 board 移动 + verify 命令执行
 6. 修改 deliver skill：增加 board 移动 + 归档
-7. 修改 cc-delegate notify hook：在 Stop 事件时更新 board 状态
+7. 修改 superclaw notify hook：在 Stop 事件时更新 board 状态
 8. 编写集成测试：完整 inbox → done 流转
 
 ### Estimated Effort
@@ -483,7 +483,7 @@ OpenClaw session start
 
 AutoDream 运行方式：
 - **同步模式**：在当前 OpenClaw session 中作为 skill 运行（简单，但会打断用户）
-- **异步模式（推荐）**：通过 cc-delegate 启动独立 session，后台运行
+- **异步模式（推荐）**：通过 superclaw 启动独立 session，后台运行
 
 ### Implementation Steps
 

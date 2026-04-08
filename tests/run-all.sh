@@ -3,7 +3,7 @@
 #
 # Usage: bash tests/run-all.sh
 #
-# Runs: install verification, hook tests, cc-delegate tests
+# Runs: install verification, hook tests, superclaw tests
 
 set -euo pipefail
 
@@ -47,12 +47,12 @@ run_suite "Hook: progress" "$SCRIPT_DIR/hooks/test-progress.sh"
 # Install verification (checks actual installation state)
 run_suite "Install verification" "$SCRIPT_DIR/install/verify-install.sh"
 
-# cc-delegate tests (requires cc-delegate installed)
-if [ -f "/root/.openclaw/workspace/bin/cc-delegate.mjs" ]; then
-  run_suite "cc-delegate: status" "$SCRIPT_DIR/cc-delegate/test-status.sh"
+# superclaw tests (requires superclaw installed)
+if [ -f "/root/.openclaw/workspace/bin/superclaw.mjs" ]; then
+  run_suite "superclaw: status" "$SCRIPT_DIR/superclaw/test-status.sh"
 else
   echo ""
-  echo "⏭️  Skipping cc-delegate tests (not installed)"
+  echo "⏭️  Skipping superclaw tests (not installed)"
 fi
 
 echo ""

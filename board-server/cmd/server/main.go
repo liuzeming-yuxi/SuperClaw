@@ -34,7 +34,7 @@ func main() {
 		ChatConfig: chat.Config{
 			OpenClawBaseURL: "http://127.0.0.1:18789",
 			OpenClawToken:   "130b9e35e8c7e52b3992253f54047d4726ec60c4d23c5ab1",
-			CCDelegatePath:  "/root/.openclaw/workspace/bin/cc-delegate.mjs",
+			SuperclawPath:  "/root/.openclaw/workspace/bin/superclaw.mjs",
 		},
 	}
 

@@ -4,9 +4,9 @@
 
 **Goal:** Send Feishu progress heartbeats every 5 minutes while CC runs, and classify/alert on abnormal exits.
 
-**Architecture:** Modify two existing bash hooks (superclaw-progress.sh, superclaw-notify.sh) and add session tracking to cc-delegate.mjs. Hooks read per-session state files written by cc-delegate to identify which task is running. No new processes, no new dependencies.
+**Architecture:** Modify two existing bash hooks (superclaw-progress.sh, superclaw-notify.sh) and add session tracking to superclaw.mjs. Hooks read per-session state files written by superclaw to identify which task is running. No new processes, no new dependencies.
 
-**Tech Stack:** Bash (hooks), Node.js (cc-delegate), jq, openclaw CLI (Feishu send)
+**Tech Stack:** Bash (hooks), Node.js (superclaw), jq, openclaw CLI (Feishu send)
 
 ---
 
@@ -14,27 +14,27 @@
 
 | File | Action | Responsibility |
 |---|---|---|
-| `cc-delegate/cc-delegate.mjs` | Modify | Write/remove `~/.superclaw/state/sessions/{name}.json` on start/stop |
+| `cli/superclaw.mjs` | Modify | Write/remove `~/.superclaw/state/sessions/{name}.json` on start/stop |
 | `hooks/superclaw-progress.sh` | Modify | Existing log + new heartbeat throttle + Feishu send |
 | `hooks/superclaw-notify.sh` | Modify | Exit classification + Feishu alert + orphan scan + cleanup |
 | `tests/hooks/test-progress-heartbeat.sh` | Create | Heartbeat throttle tests |
 | `tests/hooks/test-notify-abnormal.sh` | Create | Exit classification + orphan tests |
-| `tests/cc-delegate/test-unit.mjs` | Modify | Add writeActiveSession/removeActiveSession tests |
+| `tests/cli/test-unit.mjs` | Modify | Add writeActiveSession/removeActiveSession tests |
 
 ---
 
-### Task 1: cc-delegate — writeActiveSession / removeActiveSession
+### Task 1: superclaw — writeActiveSession / removeActiveSession
 
 **Files:**
-- Modify: `cc-delegate/cc-delegate.mjs`
-- Test: `tests/cc-delegate/test-unit.mjs`
+- Modify: `cli/superclaw.mjs`
+- Test: `tests/cli/test-unit.mjs`
 
 - [ ] **Step 1: Write failing tests for writeActiveSession and removeActiveSession**
 
-Add to `tests/cc-delegate/test-unit.mjs`:
+Add to `tests/cli/test-unit.mjs`:
 
 ```javascript
-import { writeActiveSession, removeActiveSession } from "../cc-delegate/cc-delegate.mjs";
+import { writeActiveSession, removeActiveSession } from "../cli/superclaw.mjs";
 import { existsSync, readFileSync, mkdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -84,10 +84,10 @@ describe("writeActiveSession", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `node --test tests/cc-delegate/test-unit.mjs`
+Run: `node --test tests/cli/test-unit.mjs`
 Expected: FAIL — `writeActiveSession` and `removeActiveSession` not exported
 
-- [ ] **Step 3: Implement writeActiveSession and removeActiveSession in cc-delegate.mjs**
+- [ ] **Step 3: Implement writeActiveSession and removeActiveSession in superclaw.mjs**
 
 Add after the `pruneConfigOverrides` function (around line 296), before the Opus guardrail section:
 
@@ -192,14 +192,14 @@ Same pattern as Step 5. After the `info(...)` line, add `writeActiveSession`. Be
 
 - [ ] **Step 7: Run all tests**
 
-Run: `node --test tests/cc-delegate/test-unit.mjs`
+Run: `node --test tests/cli/test-unit.mjs`
 Expected: All pass (37 existing + 3 new = 40)
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add cc-delegate/cc-delegate.mjs tests/cc-delegate/test-unit.mjs
-git commit -m "feat(cc-delegate): track active sessions for heartbeat hooks"
+git add cli/superclaw.mjs tests/cli/test-unit.mjs
+git commit -m "feat(superclaw): track active sessions for heartbeat hooks"
 ```
 
 ---
@@ -827,7 +827,7 @@ Expected: All test suites pass
 - [ ] **Step 2: Reinstall hooks to the live system**
 
 ```bash
-bash scripts/install.sh --skip-cc-delegate
+bash scripts/install.sh --skip-superclaw
 ```
 
 Expected: Skills + hooks updated, no duplicate hook entries
@@ -854,7 +854,7 @@ git push origin main
 export SUPERCLAW_FEISHU_TARGET="ou_your_open_id"
 
 # Run a short CC task
-node /root/.openclaw/workspace/bin/cc-delegate.mjs exec \
+node /root/.openclaw/workspace/bin/superclaw.mjs exec \
   --cwd /root/.openclaw/workspace/repos/superclaw \
   --model sonnet --timeout 60 \
   --prompt "Read the README.md and reply with a one-sentence summary"

@@ -17,7 +17,7 @@ type Session struct {
 	Phase         string `json:"phase"`   // "align" | "plan" | "execute" | "verify" | "deliver"
 	OCSessionKey  string `json:"-"`
 	CCSessionName string `json:"-"`
-	isNew         bool   // whether cc-delegate session has been started
+	isNew         bool   // whether superclaw session has been started
 }
 
 // Manager manages all chat sessions across tasks.
@@ -37,7 +37,7 @@ type Manager struct {
 type Config struct {
 	OpenClawBaseURL string
 	OpenClawToken   string
-	CCDelegatePath  string
+	SuperclawPath  string
 }
 
 // NewManager creates a new chat manager.
@@ -47,7 +47,7 @@ func NewManager(projectPath string, hub *ws.Hub, cfg Config) *Manager {
 		hub:             hub,
 		store:           NewStore(projectPath),
 		openclawBackend: NewOpenClawBackend(cfg.OpenClawBaseURL, cfg.OpenClawToken),
-		ccDirectBackend: NewCCDirectBackend(cfg.CCDelegatePath),
+		ccDirectBackend: NewCCDirectBackend(cfg.SuperclawPath),
 		sessions:        make(map[string]*Session),
 	}
 	return m

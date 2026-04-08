@@ -32,7 +32,7 @@ CC instance 1 ──Stop──────────> superclaw-notify.sh ─�
 ### Data flow
 
 ```
-cc-delegate starts CC
+superclaw starts CC
   └─ writes ~/.superclaw/state/sessions/{name}.json
        { session_name, cwd, model, pid, start_time, session_id }
 
@@ -134,9 +134,9 @@ Alert:
 
 7. **Orphan scan**: After handling current session, scan `sessions/` directory. For each remaining `.json` file, check if pid is alive (`kill -0 $pid`). If dead, send alert and clean up.
 
-## Component 3: cc-delegate active session tracking
+## Component 3: superclaw active session tracking
 
-### Changes to cc-delegate.mjs
+### Changes to superclaw.mjs
 
 Add a `writeActiveSession(opts, childPid)` function:
 
@@ -183,7 +183,7 @@ Add a `removeActiveSession(opts, childPid)` function to delete the file on exit.
 ### Integration test
 
 - `tests/e2e/test-heartbeat-e2e.sh`:
-  - Start cc-delegate with a short task
+  - Start superclaw with a short task
   - Verify active_session.json created
   - Verify tool_log.jsonl populated
   - Kill CC, verify orphan detected
@@ -194,7 +194,7 @@ Add a `removeActiveSession(opts, childPid)` function to delete the file on exit.
 |---|---|
 | `hooks/superclaw-progress.sh` | Add heartbeat throttle + Feishu send |
 | `hooks/superclaw-notify.sh` | Add exit classification + orphan scan |
-| `cc-delegate/cc-delegate.mjs` | Add writeActiveSession/removeActiveSession |
+| `cli/superclaw.mjs` | Add writeActiveSession/removeActiveSession |
 | `scripts/install.sh` | Fix hook dedup detection (already done) |
 
 ## Not in scope

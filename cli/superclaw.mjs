@@ -8,7 +8,7 @@ import {
   existsSync, mkdirSync, readFileSync, readdirSync,
   rmSync, statSync, writeFileSync,
 } from "node:fs";
-import { spawn, spawnSync } from "node:child_process";
+import { execSync, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, resolve, basename } from "node:path";
@@ -27,6 +27,7 @@ const CONFIG_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const CONFIG_MAX_DIRS = 32;
 const MANIFEST_VERSION = 1;
 const BUFFER_MAX_BYTES = 64 * 1024 * 1024; // 64 MiB cap for captured stdout/stderr
+const INSTALLED_JSON_PATH = resolve(homedir(), ".superclaw", "installed.json");
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -498,6 +499,8 @@ function printUsage() {
     "  cc-delegate session delete --name <n>",
     "  cc-delegate session list",
     "  cc-delegate status",
+    "  cc-delegate version",
+    "  cc-delegate update [--check]",
     "",
     "Environment:",
     "  Reads .env from script directory for ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, etc.",
@@ -523,6 +526,7 @@ function parseArgs(argv) {
     resumeSession: null,
     last: null,            // --last N: show only last N turns
     mode: null,           // derived: "exec" | "session"
+    checkOnly: false,     // --check (for update)
   };
 
   while (args.length > 0) {
@@ -555,6 +559,14 @@ function parseArgs(argv) {
       opts.command = "status";
       continue;
     }
+    if (arg === "version") {
+      opts.command = "version";
+      continue;
+    }
+    if (arg === "update") {
+      opts.command = "update";
+      continue;
+    }
 
     // Flags
     if (arg === "--cwd") { opts.cwd = args.shift(); continue; }
@@ -567,6 +579,7 @@ function parseArgs(argv) {
     if (arg === "--timeout") { opts.timeout = args.shift(); continue; }
     if (arg === "--resume-session") { opts.resumeSession = args.shift(); continue; }
     if (arg === "--last") { opts.last = parseInt(args.shift(), 10); continue; }
+    if (arg === "--check") { opts.checkOnly = true; continue; }
 
     // Treat unknown as prompt text
     const rest = [arg, ...args];
@@ -773,8 +786,182 @@ async function cmdSessionShow(opts, acpx) {
   }
 }
 
+// ─── Version drift detection ────────────────────────────────────────────────
+
+let _driftChecked = false;
+
+function checkVersionDrift() {
+  if (_driftChecked) return;
+  _driftChecked = true;
+  try {
+    if (!existsSync(INSTALLED_JSON_PATH)) return;
+    const installed = JSON.parse(readFileSync(INSTALLED_JSON_PATH, "utf8"));
+    const installedCommit = (installed.commitFull || installed.commit || "").trim();
+    if (!installedCommit) return;
+    const repoDir = installed.repoPath || dirname(SCRIPT_DIR);
+    const currentCommit = execSync("git rev-parse HEAD", {
+      cwd: repoDir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (installedCommit !== currentCommit && !currentCommit.startsWith(installedCommit) && !installedCommit.startsWith(currentCommit)) {
+      process.stderr.write(
+        `[superclaw] warning: installed (${installedCommit.slice(0, 7)}) != repo (${currentCommit.slice(0, 7)}). Run 'superclaw update'.\n`
+      );
+    }
+  } catch { /* best-effort */ }
+}
+
+// ─── version / update commands ──────────────────────────────────────────────
+
+async function cmdVersion() {
+  // Read installed info
+  let installed = null;
+  try {
+    if (existsSync(INSTALLED_JSON_PATH)) {
+      installed = JSON.parse(readFileSync(INSTALLED_JSON_PATH, "utf8"));
+    }
+  } catch { /* ignore */ }
+
+  // Read repo package.json for current version
+  const pkgPath = resolve(dirname(SCRIPT_DIR), "package.json");
+  let repoVersion = "unknown";
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+    repoVersion = pkg.version || "unknown";
+  } catch { /* ignore */ }
+
+  // Get current repo commit
+  const repoDir = (installed && installed.repoPath) || dirname(SCRIPT_DIR);
+  let currentCommit = "unknown";
+  try {
+    currentCommit = execSync("git rev-parse --short HEAD", {
+      cwd: repoDir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch { /* ignore */ }
+
+  // Display installed info
+  if (installed) {
+    const iVer = installed.version || "?";
+    const iCommit = (installed.commit || "?").slice(0, 7);
+    const iDate = installed.date || installed.installedAt || "?";
+    console.log(`installed: v${iVer} (${iCommit}) on ${iDate}`);
+  } else {
+    console.log("installed: no install metadata found (~/.superclaw/installed.json missing)");
+  }
+
+  // Compare and display repo info
+  if (installed && (installed.commitFull || installed.commit)) {
+    const installedFull = (installed.commitFull || installed.commit).trim();
+    let currentFull = "";
+    try {
+      currentFull = execSync("git rev-parse HEAD", {
+        cwd: repoDir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+    } catch { /* ignore */ }
+
+    if (installedFull === currentFull || currentFull.startsWith(installedFull) || installedFull.startsWith(currentFull)) {
+      console.log(`repo:      v${repoVersion} (${currentCommit}) — up to date`);
+    } else {
+      // Count commits ahead
+      let aheadCount = "?";
+      try {
+        aheadCount = execSync(`git rev-list --count ${installedFull}..HEAD`, {
+          cwd: repoDir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+        }).trim();
+      } catch { /* ignore */ }
+      const plural = aheadCount === "1" ? "" : "s";
+      console.log(`repo:      v${repoVersion} (${currentCommit}) — ${aheadCount} commit${plural} ahead, run 'superclaw update'`);
+    }
+  } else {
+    console.log(`repo:      v${repoVersion} (${currentCommit})`);
+  }
+}
+
+async function cmdUpdate(opts) {
+  // Read installed.json for repoPath
+  let repoDir = dirname(SCRIPT_DIR);
+  try {
+    if (existsSync(INSTALLED_JSON_PATH)) {
+      const installed = JSON.parse(readFileSync(INSTALLED_JSON_PATH, "utf8"));
+      if (installed.repoPath) repoDir = installed.repoPath;
+    }
+  } catch { /* ignore */ }
+
+  // Fetch latest from origin
+  info("fetching origin main...");
+  try {
+    execSync("git fetch origin main", {
+      cwd: repoDir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (err) {
+    fail(`git fetch failed: ${err.message}`);
+  }
+
+  // Compare local HEAD vs origin/main
+  let localHead, remoteHead;
+  try {
+    localHead = execSync("git rev-parse HEAD", {
+      cwd: repoDir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    remoteHead = execSync("git rev-parse origin/main", {
+      cwd: repoDir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch (err) {
+    fail(`git rev-parse failed: ${err.message}`);
+  }
+
+  if (localHead === remoteHead) {
+    info("already up to date.");
+    return;
+  }
+
+  // Show diff info
+  let behindCount = "?";
+  try {
+    behindCount = execSync(`git rev-list --count ${localHead}..origin/main`, {
+      cwd: repoDir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch { /* ignore */ }
+  const plural = behindCount === "1" ? "" : "s";
+  info(`${behindCount} new commit${plural} on origin/main`);
+
+  // Show recent commits
+  try {
+    const log = execSync(`git log --oneline ${localHead}..origin/main`, {
+      cwd: repoDir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (log) console.log(log);
+  } catch { /* ignore */ }
+
+  if (opts.checkOnly) {
+    info("run 'superclaw update' (without --check) to apply.");
+    return;
+  }
+
+  // Pull and re-install
+  info("pulling origin main...");
+  try {
+    execSync("git pull origin main", {
+      cwd: repoDir, encoding: "utf8", stdio: "inherit",
+    });
+  } catch (err) {
+    fail(`git pull failed: ${err.message}`);
+  }
+
+  info("running install.sh...");
+  const installScript = resolve(repoDir, "scripts", "install.sh");
+  if (!existsSync(installScript)) {
+    fail(`install script not found: ${installScript}`);
+  }
+
+  const { status } = spawnSync("bash", [installScript], {
+    cwd: repoDir, stdio: "inherit", env: process.env,
+  });
+  process.exit(status ?? 0);
+}
+
 async function cmdExec(opts, acpx) {
   if (!opts.prompt) fail("exec requires --prompt <text>");
+  checkVersionDrift();
 
   const env = prepareInvocationEnv(opts);
   const commonArgs = buildCommonArgs(opts);
@@ -798,6 +985,7 @@ async function cmdExec(opts, acpx) {
 async function cmdSessionStart(opts, acpx) {
   if (!opts.sessionName) fail("session start requires --name <name>");
   if (!opts.prompt) fail("session start requires --prompt <text>");
+  checkVersionDrift();
 
   const env = prepareInvocationEnv(opts);
   const commonArgs = buildCommonArgs(opts, { includeModel: false });
@@ -850,6 +1038,7 @@ async function cmdSessionStart(opts, acpx) {
 async function cmdSessionContinue(opts, acpx) {
   if (!opts.sessionName) fail("session continue requires --name <name>");
   if (!opts.prompt) fail("session continue requires --prompt <text>");
+  checkVersionDrift();
 
   // Auto-resolve --cwd from manifest if not provided
   if (!opts.cwd) {
@@ -937,6 +1126,14 @@ async function main() {
       await cmdStatus(acpx);
       break;
 
+    case "version":
+      await cmdVersion();
+      break;
+
+    case "update":
+      await cmdUpdate(opts);
+      break;
+
     case "exec":
       await cmdExec(opts, acpx);
       break;
@@ -980,7 +1177,7 @@ if (isMainModule) {
   // Skip for short commands (status, list, show) that don't spawn long-lived children.
   const needsIsolation = !process.env.SUPERCLAW_SETSID_DONE
     && process.argv.some((a) => a === "exec" || a === "session");
-  const isShortSubcommand = process.argv.some((a) => a === "status" || a === "list" || a === "show");
+  const isShortSubcommand = process.argv.some((a) => a === "status" || a === "list" || a === "show" || a === "version" || a === "update");
 
   if (needsIsolation && !isShortSubcommand) {
     // Load .env BEFORE re-exec so SUPERCLAW_* vars are in the child's environment

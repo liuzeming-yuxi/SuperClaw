@@ -62,7 +62,7 @@ echo ""
 
 echo "## OpenClaw Skills"
 
-SKILL_DIR="${HOME}/.openclaw/workspace/skills/superclaw"
+SKILL_DIR="${HOME}/.openclaw/workspace/skills/superclaw-cli"
 
 if [ -f "$SKILL_DIR/SKILL.md" ]; then
   pass "SuperClaw skill entry: $SKILL_DIR/SKILL.md"
@@ -83,17 +83,17 @@ done
 
 echo ""
 
-# ─── Part 3: cc-delegate ───
+# ─── Part 3: superclaw ───
 
-echo "## cc-delegate Bridge"
+echo "## superclaw Bridge"
 
-CC_DELEGATE="/root/.openclaw/workspace/bin/cc-delegate.mjs"
+SUPERCLAW_CLI="/root/.openclaw/workspace/bin/superclaw.mjs"
 CC_ENV="/root/.openclaw/workspace/bin/.env"
 
-if [ -f "$CC_DELEGATE" ]; then
-  pass "cc-delegate script exists"
+if [ -f "$SUPERCLAW_CLI" ]; then
+  pass "superclaw script exists"
 else
-  fail "cc-delegate script not found at $CC_DELEGATE"
+  fail "superclaw script not found at $SUPERCLAW_CLI"
 fi
 
 if [ -f "$CC_ENV" ]; then
@@ -110,7 +110,7 @@ fi
 if [ "$(id -u)" = "0" ]; then
   pass "Running as root (IS_SANDBOX=1 mode)"
 else
-  warn "Not running as root — cc-delegate expects root + IS_SANDBOX=1"
+  warn "Not running as root — superclaw expects root + IS_SANDBOX=1"
 fi
 
 echo ""
