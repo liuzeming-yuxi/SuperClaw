@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.1.1] - 2026-04-08
+## [0.1.2] - 2026-04-08
+
+### Added
+
+- **`superclaw doctor`**: 34-item health check across 5 categories with `--fix` auto-repair and `--verbose` output
+
+### Fixed
+
+- **Dual state directory bug**: setsid re-exec resolved symlink to repo source, creating rogue `cli/state/` alongside `bin/state/`. Fixed by preserving original `process.argv[1]` path
+- **isPidOurs false stale detection**: Widened tolerance from 2s symmetric to 120s directional — process always starts before `writeActiveSession` records `start_time`
+- **`ensureEnv` blocking doctor/version**: These commands now skip `.env` validation so they can run diagnostically even when `.env` is misconfigured
+
 
 ### Added
 
