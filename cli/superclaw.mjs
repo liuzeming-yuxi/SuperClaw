@@ -510,16 +510,14 @@ function printUsage() {
     "superclaw — Claude Code delegate for OpenClaw",
     "",
     "Usage:",
-    "  superclaw exec [--cwd <path>] [--model opus|sonnet] [--max-turns N] [--timeout S] [--format text|json|quiet] --prompt <text>",
-    "  superclaw session start --name <n> [--cwd <path>] [--model opus|sonnet] --prompt <text>",
-    "  superclaw session continue --name <n> [--cwd <path>] --prompt <text>",
-    "  superclaw session show --name <n> [--cwd <path>] [--last N]",
-    "  superclaw session delete --name <n>",
-    "  superclaw session list",
-    "  superclaw session ps [--cwd <path>]",
-    "  superclaw session stop --name <n> [--signal SIGTERM|SIGKILL]",
-    "  superclaw session clean [--dry-run]",
-    "  superclaw session resume --name <n> [-- <claude args>]",
+    "  superclaw run [--cwd <path>] [--model opus|sonnet] [--max-turns N] [--timeout S] [--format text|json|quiet] --prompt <text>",
+    "  superclaw start <name> [--cwd <path>] [--model opus|sonnet] --prompt <text>",
+    "  superclaw send <name> [--cwd <path>] --prompt <text>",
+    "  superclaw show <name> [--cwd <path>] [--last N]",
+    "  superclaw ps [--cwd <path>]",
+    "  superclaw stop <name> [--signal SIGKILL]",
+    "  superclaw rm <name>",
+    "  superclaw clean [--dry-run]",
     "  superclaw claude [<claude args>]",
     "  superclaw status",
     "  superclaw version",
@@ -536,10 +534,9 @@ function printUsage() {
 function parseArgs(argv) {
   const args = [...argv];
   const opts = {
-    command: null,        // "exec" | "session" | "status"
-    subcommand: null,     // "start" | "continue" | "list" (for session)
+    command: null,
     cwd: null,
-    model: "opus",        // default to opus
+    model: "opus",
     format: "text",
     sessionName: null,
     prompt: null,
@@ -548,21 +545,20 @@ function parseArgs(argv) {
     timeout: null,
     freshSession: false,
     resumeSession: null,
-    last: null,            // --last N: show only last N turns
+    last: null,
     mode: null,           // derived: "exec" | "session"
-    checkOnly: false,     // --check (for update)
-    signal: null,         // --signal SIGTERM|SIGKILL (for session stop)
-    dryRun: false,        // --dry-run (for session clean)
-    fix: false,           // --fix (for doctor)
-    verbose: false,       // --verbose (for doctor)
-    passthrough: [],      // args after -- (for session resume → claude)
+    checkOnly: false,
+    signal: null,
+    dryRun: false,
+    fix: false,
+    verbose: false,
+    passthrough: [],
   };
 
   while (args.length > 0) {
     const arg = args.shift();
     if (!arg) continue;
 
-    // -- means "everything after this is passthrough to child process"
     if (arg === "--") {
       opts.passthrough = [...args];
       break;
@@ -573,50 +569,65 @@ function parseArgs(argv) {
       process.exit(0);
     }
 
-    // Top-level commands
-    if (arg === "exec") {
-      opts.command = "exec";
+    // ─── Top-level commands ─────────────────────────────────────────────
+    if (arg === "run") {
+      opts.command = "run";
       opts.mode = "exec";
       continue;
     }
-    if (arg === "session") {
-      opts.command = "session";
+    if (arg === "start") {
+      opts.command = "start";
       opts.mode = "session";
-      // Next arg should be subcommand
-      const sub = args[0];
-      if (["start", "continue", "list", "show", "delete", "ps", "stop", "clean", "resume"].includes(sub)) {
-        opts.subcommand = args.shift();
-        if (opts.subcommand === "start") opts.freshSession = true;
-      }
+      opts.freshSession = true;
+      // Next arg is session name (positional)
+      if (args[0] && !args[0].startsWith("-")) opts.sessionName = args.shift();
       continue;
     }
-    if (arg === "status") {
-      opts.command = "status";
+    if (arg === "send") {
+      opts.command = "send";
+      opts.mode = "session";
+      if (args[0] && !args[0].startsWith("-")) opts.sessionName = args.shift();
       continue;
     }
-    if (arg === "version") {
-      opts.command = "version";
+    if (arg === "show") {
+      opts.command = "show";
+      opts.mode = "session";
+      if (args[0] && !args[0].startsWith("-")) opts.sessionName = args.shift();
       continue;
     }
-    if (arg === "update") {
-      opts.command = "update";
+    if (arg === "ps") {
+      opts.command = "ps";
+      continue;
+    }
+    if (arg === "stop") {
+      opts.command = "stop";
+      if (args[0] && !args[0].startsWith("-")) opts.sessionName = args.shift();
+      continue;
+    }
+    if (arg === "rm") {
+      opts.command = "rm";
+      if (args[0] && !args[0].startsWith("-")) opts.sessionName = args.shift();
+      continue;
+    }
+    if (arg === "clean") {
+      opts.command = "clean";
       continue;
     }
     if (arg === "claude") {
       opts.command = "claude";
-      opts.passthrough = [...args]; // everything after "claude" goes to claude
+      opts.passthrough = [...args];
       break;
     }
-    if (arg === "doctor") {
-      opts.command = "doctor";
-      continue;
-    }
+    if (arg === "status") { opts.command = "status"; continue; }
+    if (arg === "version") { opts.command = "version"; continue; }
+    if (arg === "update") { opts.command = "update"; continue; }
+    if (arg === "doctor") { opts.command = "doctor"; continue; }
 
-    // Flags
+    // ─── Flags ──────────────────────────────────────────────────────────
     if (arg === "--cwd") { opts.cwd = args.shift(); continue; }
     if (arg === "--model") { opts.model = args.shift(); continue; }
     if (arg === "--format") { opts.format = args.shift(); continue; }
-    if (arg === "--name") { opts.sessionName = args.shift(); continue; }
+    if (arg === "--name") { opts.sessionName = args.shift(); continue; } // legacy compat
     if (arg === "--prompt") { opts.prompt = args.shift(); continue; }
     if (arg === "--file") { opts.file = args.shift(); continue; }
     if (arg === "--max-turns") { opts.maxTurns = args.shift(); continue; }
@@ -669,34 +680,8 @@ async function cmdStatus(acpx) {
   console.log("");
 }
 
-async function cmdSessionList(opts) {
-  const manifest = readManifest();
-  let sessions = Object.values(manifest.sessions);
-  if (sessions.length === 0) {
-    console.log("No tracked sessions.");
-    return;
-  }
-  if (opts.cwd) {
-    const targetCwd = resolve(opts.cwd);
-    sessions = sessions.filter((s) => s.cwd === targetCwd);
-    if (sessions.length === 0) {
-      console.log(`No sessions for cwd: ${targetCwd}`);
-      return;
-    }
-  }
-  const activeSessions = readAllActiveSessions();
-  const activeByName = new Map(activeSessions.map((s) => [s.session_name, s]));
-  console.log("Tracked sessions:");
-  for (const s of sessions) {
-    const active = activeByName.get(s.sessionName);
-    let status = "stopped";
-    if (active) status = active.alive ? "running" : "stale";
-    console.log(`  ${s.sessionName} | model=${s.model} | status=${status} | cwd=${s.cwd} | updated=${s.updatedAt}`);
-  }
-}
-
 async function cmdSessionDelete(opts) {
-  if (!opts.sessionName) fail("session delete requires --name <name>");
+  if (!opts.sessionName) fail("rm requires a session name");
 
   const manifest = readManifest();
   const key = Object.keys(manifest.sessions).find(
@@ -764,7 +749,7 @@ async function cmdSessionPs(opts) {
 }
 
 async function cmdSessionStop(opts) {
-  if (!opts.sessionName) fail("session stop requires --name <name>");
+  if (!opts.sessionName) fail("stop requires a session name");
   const activeSessions = readAllActiveSessions();
   const active = activeSessions.find((s) => s.session_name === opts.sessionName);
   if (!active) {
@@ -800,7 +785,7 @@ async function cmdSessionStop(opts) {
   }
   if (isPidAlive(active.pid)) {
     if (sig !== "SIGKILL") {
-      console.log(`Process still alive after 5s. Try: superclaw session stop --name ${opts.sessionName} --signal SIGKILL`);
+      console.log(`Process still alive after 5s. Try: superclaw stop ${opts.sessionName} --signal SIGKILL`);
     } else {
       console.log(`Warning: PID ${active.pid} still alive after SIGKILL.`);
     }
@@ -846,33 +831,8 @@ async function cmdClaude(opts) {
   child.on("error", (err) => fail(`Failed to launch claude: ${err.message}`));
 }
 
-async function cmdSessionResume(opts) {
-  if (!opts.sessionName) fail("session resume requires --name <name>");
-
-  // Resolve cwd from manifest if not provided
-  const manifest = readManifest();
-  const entry = Object.values(manifest.sessions).find((s) => s.sessionName === opts.sessionName);
-  const cwd = opts.cwd || entry?.cwd || process.cwd();
-
-  info(`Resuming session in: ${cwd}`);
-
-  // Sessions now live in ~/.claude/ (no custom CLAUDE_CONFIG_DIR).
-  // Just launch claude --resume in the right cwd and let it find the session.
-  const claudeArgs = ["--resume", ...opts.passthrough];
-  const env = { ...process.env, IS_SANDBOX: "1" };
-
-  const child = spawn("claude", claudeArgs, {
-    cwd: resolve(cwd),
-    env,
-    stdio: "inherit",
-  });
-
-  child.on("exit", (code) => process.exit(code ?? 1));
-  child.on("error", (err) => fail(`Failed to launch claude: ${err.message}`));
-}
-
 async function cmdSessionShow(opts, acpx) {
-  if (!opts.sessionName) fail("session show requires --name <name>");
+  if (!opts.sessionName) fail("show requires a session name");
 
   // Auto-resolve --cwd from manifest if not provided
   if (!opts.cwd) {
@@ -1202,8 +1162,8 @@ async function cmdExec(opts, acpx) {
 }
 
 async function cmdSessionStart(opts, acpx) {
-  if (!opts.sessionName) fail("session start requires --name <name>");
-  if (!opts.prompt) fail("session start requires --prompt <text>");
+  if (!opts.sessionName) fail("start requires a session name");
+  if (!opts.prompt) fail("start requires --prompt <text>");
   autoCleanStaleSessions();
   checkVersionDrift();
 
@@ -1228,7 +1188,7 @@ async function cmdSessionStart(opts, acpx) {
     "claude", "-s", opts.sessionName, opts.prompt,
   ];
 
-  info(`session start | name=${opts.sessionName} | model=${opts.model}`);
+  info(`start | name=${opts.sessionName} | model=${opts.model}`);
   writeActiveSession(opts, process.pid);
   startDelegateHeartbeat(opts);
   try {
@@ -1256,8 +1216,8 @@ async function cmdSessionStart(opts, acpx) {
 }
 
 async function cmdSessionContinue(opts, acpx) {
-  if (!opts.sessionName) fail("session continue requires --name <name>");
-  if (!opts.prompt) fail("session continue requires --prompt <text>");
+  if (!opts.sessionName) fail("send requires a session name");
+  if (!opts.prompt) fail("send requires --prompt <text>");
   autoCleanStaleSessions();
   checkVersionDrift();
 
@@ -1285,7 +1245,7 @@ async function cmdSessionContinue(opts, acpx) {
     const record = await readSessionRecord(acpx, opts, env);
     const remembered = getRememberedSession(opts);
     if (!remembered || !record || remembered.acpxRecordId !== record.acpxRecordId) {
-      fail("Opus follow-up refused: session not tracked by wrapper. Use 'session start' to create a new one.");
+      fail("Opus follow-up refused: session not tracked by wrapper. Use 'start' to create a new one.");
     }
     if (record) rememberSession(opts, record);
   }
@@ -1296,7 +1256,7 @@ async function cmdSessionContinue(opts, acpx) {
     "claude", "-s", opts.sessionName, opts.prompt,
   ];
 
-  info(`session continue | name=${opts.sessionName} | model=${opts.model}`);
+  info(`send | name=${opts.sessionName} | model=${opts.model}`);
   writeActiveSession(opts, process.pid);
   startDelegateHeartbeat(opts);
   try {
@@ -1333,16 +1293,53 @@ async function main() {
   }
 
   // Step 2: Ensure env vars — skip for commands that don't need API credentials
-  const skipEnv = opts.command === "doctor" || opts.command === "version" || opts.command === "claude" || opts.subcommand === "resume";
+  const skipEnv = ["doctor", "version", "claude", "ps", "rm", "clean", "stop"].includes(opts.command);
   if (!skipEnv) {
     ensureEnv();
   }
 
-  // Step 3: Resolve acpx (lazy — only needed for commands that use it)
-  const acpx = !skipEnv ? resolveAcpx() : null;
+  // Step 3: Resolve acpx (only needed for run/start/send/show/status)
+  const needsAcpx = ["run", "start", "send", "show", "status"].includes(opts.command);
+  const acpx = needsAcpx ? resolveAcpx() : null;
 
   // Step 4: Dispatch
   switch (opts.command) {
+    case "run":
+      await cmdExec(opts, acpx);
+      break;
+
+    case "start":
+      await cmdSessionStart(opts, acpx);
+      break;
+
+    case "send":
+      await cmdSessionContinue(opts, acpx);
+      break;
+
+    case "show":
+      await cmdSessionShow(opts, acpx);
+      break;
+
+    case "ps":
+      await cmdSessionPs(opts);
+      break;
+
+    case "stop":
+      await cmdSessionStop(opts);
+      break;
+
+    case "rm":
+      await cmdSessionDelete(opts);
+      break;
+
+    case "clean":
+      await cmdSessionClean(opts);
+      break;
+
+    case "claude":
+      await cmdClaude(opts);
+      break;
+
     case "status":
       await cmdStatus(acpx);
       break;
@@ -1365,38 +1362,6 @@ async function main() {
       });
       process.exit(failCount > 0 ? 1 : 0);
     }
-
-    case "claude":
-      await cmdClaude(opts);
-      break;
-
-    case "exec":
-      await cmdExec(opts, acpx);
-      break;
-
-    case "session":
-      if (opts.subcommand === "list") {
-        await cmdSessionList(opts);
-      } else if (opts.subcommand === "show") {
-        await cmdSessionShow(opts, acpx);
-      } else if (opts.subcommand === "delete") {
-        await cmdSessionDelete(opts);
-      } else if (opts.subcommand === "ps") {
-        await cmdSessionPs(opts);
-      } else if (opts.subcommand === "stop") {
-        await cmdSessionStop(opts);
-      } else if (opts.subcommand === "clean") {
-        await cmdSessionClean(opts);
-      } else if (opts.subcommand === "resume") {
-        await cmdSessionResume(opts);
-      } else if (opts.subcommand === "start") {
-        await cmdSessionStart(opts, acpx);
-      } else if (opts.subcommand === "continue") {
-        await cmdSessionContinue(opts, acpx);
-      } else {
-        fail("Unknown session subcommand. Use: start, continue, show, delete, list, ps, stop, clean, resume");
-      }
-      break;
 
     default:
       printUsage();
@@ -1422,7 +1387,7 @@ if (isMainModule) {
   const needsIsolation = !process.env.SUPERCLAW_SETSID_DONE
     && process.argv.some((a) => a === "exec" || a === "session");
   const isShortSubcommand = process.argv.some(
-    (a) => a === "status" || a === "list" || a === "show" || a === "ps" || a === "stop" || a === "clean" || a === "delete" || a === "version" || a === "update" || a === "doctor" || a === "resume" || a === "claude"
+    (a) => ["status", "ps", "show", "stop", "clean", "rm", "version", "update", "doctor", "claude"].includes(a)
   );
 
   if (needsIsolation && !isShortSubcommand) {
