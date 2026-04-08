@@ -11,6 +11,10 @@
     "type": "git",
     "url": "https://github.com/liuzeming-yuxi/SuperClaw.git"
   },
+  "homepage": "https://github.com/liuzeming-yuxi/SuperClaw",
+  "bugs": {"url": "https://github.com/liuzeming-yuxi/SuperClaw/issues"},
+  "engines": {"node": ">=18"},
+  "scripts": {"test": "bash tests/run-all.sh"},
   "keywords": [
     "openclaw",
     "claude-code",
