@@ -11,7 +11,7 @@ import {
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
 
@@ -273,6 +273,61 @@ function removeActiveSession(opts, childPid, sessionsDir = DEFAULT_SESSIONS_DIR)
   const heartbeatPath = resolve(sessionsDir, `${name}.heartbeat`);
   rmSync(filePath, { force: true });
   rmSync(heartbeatPath, { force: true });
+  stopDelegateHeartbeat();
+}
+
+// ─── Delegate-level heartbeat (independent of CC hooks) ───────────────────────
+// Covers the blind spot where CC is in a long thinking phase with no tool calls,
+// so the PostToolUse hook never fires and the hook-based heartbeat stays silent.
+
+let heartbeatTimer = null;
+
+function startDelegateHeartbeat(opts) {
+  const intervalMs = parseInt(process.env.SUPERCLAW_HEARTBEAT_INTERVAL || "300", 10) * 1000;
+  const target = process.env.SUPERCLAW_FEISHU_TARGET;
+  const account = process.env.SUPERCLAW_FEISHU_ACCOUNT || "default";
+  const oclawPath = process.env.SUPERCLAW_OPENCLAW_PATH || "openclaw";
+
+  if (!target) return; // No Feishu target → skip
+
+  const sessionName = opts.sessionName || `exec-${process.pid}`;
+  const cwdBase = basename(resolve(opts.cwd || process.cwd()));
+  const startTime = Date.now();
+
+  heartbeatTimer = setInterval(() => {
+    const elapsedMin = Math.round((Date.now() - startTime) / 60000);
+
+    // Count recent tool calls from log
+    let toolCount = 0;
+    try {
+      const logPath = resolve(homedir(), ".superclaw", "state", "tool_log.jsonl");
+      if (existsSync(logPath)) {
+        const content = readFileSync(logPath, "utf8");
+        toolCount = (content.match(/"session_id"/g) || []).length;
+      }
+    } catch { /* ok */ }
+
+    const message = `📡 CC 进度 | ${sessionName} | ${cwdBase}\n⏱ 已运行 ${elapsedMin}m | 工具调用 ${toolCount} 次\n💭 (cc-delegate heartbeat)`;
+
+    // Fire and forget — don't block the event loop
+    const cp = spawn(oclawPath, [
+      "message", "send",
+      "--channel", "feishu",
+      "--account", account,
+      "--target", target,
+      "--message", message,
+    ], { stdio: "ignore", detached: true });
+    cp.unref();
+  }, intervalMs);
+
+  heartbeatTimer.unref(); // Don't prevent Node from exiting
+}
+
+function stopDelegateHeartbeat() {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
 }
 
 // ─── CLAUDE_CONFIG_DIR bootstrap (for model pinning) ─────────────────────────
@@ -682,6 +737,7 @@ async function cmdExec(opts, acpx) {
 
   info(`exec | model=${opts.model} | cwd=${opts.cwd || process.cwd()}`);
   writeActiveSession(opts, process.pid);
+  startDelegateHeartbeat(opts);
   try {
     const result = await spawnObserved(acpx.command, runArgs, env);
     removeActiveSession(opts, process.pid);
@@ -718,6 +774,7 @@ async function cmdSessionStart(opts, acpx) {
 
   info(`session start | name=${opts.sessionName} | model=${opts.model}`);
   writeActiveSession(opts, process.pid);
+  startDelegateHeartbeat(opts);
   try {
     const result = await spawnObserved(acpx.command, runArgs, env);
 
@@ -786,6 +843,7 @@ async function cmdSessionContinue(opts, acpx) {
 
   info(`session continue | name=${opts.sessionName} | model=${opts.model}`);
   writeActiveSession(opts, process.pid);
+  startDelegateHeartbeat(opts);
   try {
     const result = await spawnObserved(acpx.command, runArgs, env);
 
