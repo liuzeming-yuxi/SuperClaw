@@ -606,7 +606,10 @@ function parseArgs(argv) {
     }
     if (arg === "rm") {
       opts.command = "rm";
-      if (args[0] && !args[0].startsWith("-")) opts.sessionName = args.shift();
+      // Collect all positional args as session names
+      opts.sessionNames = [];
+      while (args[0] && !args[0].startsWith("-")) opts.sessionNames.push(args.shift());
+      if (opts.sessionNames.length === 1) opts.sessionName = opts.sessionNames[0];
       continue;
     }
     if (arg === "clean") {
@@ -681,25 +684,24 @@ async function cmdStatus(acpx) {
 }
 
 async function cmdSessionDelete(opts) {
-  if (!opts.sessionName) fail("rm requires a session name");
+  const names = opts.sessionNames?.length ? opts.sessionNames : opts.sessionName ? [opts.sessionName] : null;
+  if (!names || names.length === 0) fail("rm requires at least one session name");
 
   const manifest = readManifest();
-  const key = Object.keys(manifest.sessions).find(
-    (k) => manifest.sessions[k].sessionName === opts.sessionName,
-  );
-
-  if (!key) {
-    fail(`Session "${opts.sessionName}" not found in manifest.`);
+  for (const name of names) {
+    const key = Object.keys(manifest.sessions).find(
+      (k) => manifest.sessions[k].sessionName === name,
+    );
+    if (!key) {
+      info(`Session "${name}" not found — skipping`);
+      continue;
+    }
+    const session = manifest.sessions[key];
+    delete manifest.sessions[key];
+    removeActiveSession({ sessionName: name }, 0);
+    info(`Deleted: ${name} (cwd=${session.cwd}, model=${session.model})`);
   }
-
-  const session = manifest.sessions[key];
-  delete manifest.sessions[key];
   writeManifest(manifest);
-
-  // Also clean up active session files if they exist
-  removeActiveSession(opts, 0);
-
-  info(`Deleted session: ${opts.sessionName} (cwd=${session.cwd}, model=${session.model})`);
 }
 
 async function cmdSessionPs(opts) {
