@@ -120,22 +120,20 @@ SuperClaw：  人 ↔ OpenClaw ↔ Claude Code
   → approve → merge 🎉
 ```
 
-## Prerequisites
+## Quick Start
 
-- [OpenClaw](https://github.com/openclaw/openclaw) installed and configured
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
-- [Superpowers](https://github.com/obra/superpowers) installed as Claude Code plugin
-- A Feishu bot connected to OpenClaw (for notifications)
+**Agent?** Read [INSTALL.md](INSTALL.md) — it has everything you need to install, configure, and verify.
 
-## Installation
+**Human?** Tell your OpenClaw:
+
+> "用 SuperClaw 帮我写一个 hello world"
+
+Or install manually:
 
 ```bash
 git clone https://github.com/liuzeming-yuxi/SuperClaw.git
-cd superclaw
-sudo bash scripts/install.sh
+cd SuperClaw && sudo bash scripts/install.sh
 ```
-
-安装脚本自动完成所有配置。详细选项和故障排查见 [INSTALL.md](INSTALL.md)。
 
 ## Project Structure
 
@@ -154,7 +152,7 @@ superclaw/
 │   └── deliver/SKILL.md         # Phase 5: 交付
 │
 ├── cli/                        # OpenClaw → Claude Code 桥接层
-│   ├── superclaw.mjs          # 核心脚本（679 行）
+│   ├── superclaw.mjs          # 核心脚本
 │   ├── SKILL.md                 # OpenClaw skill 定义
 │   ├── .env.example             # 环境变量模板
 │   ├── references/              # 安装指南

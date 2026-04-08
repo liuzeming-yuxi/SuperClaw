@@ -1,160 +1,127 @@
 # SuperClaw Installation Guide
 
-> 脚本干活，文档说怎么调脚本。
+> This document is for **Agents** (OpenClaw, Claude Code, or any automated installer).
+> Follow the steps in order. Every command is copy-pasteable.
 
-## 前置条件
+## Prerequisites
 
-| 依赖 | 最低版本 | 检查命令 |
+| Dependency | Min Version | Check |
 |---|---|---|
-| OpenClaw | - | `openclaw --version` |
 | Node.js | 18+ | `node --version` |
-| jq | - | `jq --version` |
+| jq | any | `jq --version` |
+| git | any | `git --version` |
 | Claude Code | 2.x+ | `claude --version` |
+| OpenClaw | any | `openclaw --version` |
 
-缺什么装什么：
+Missing something?
 - jq: `apt install jq` / `brew install jq`
 - Claude Code: `curl -fsSL https://claude.ai/install.sh | bash`
 
-## 一键安装
+## Install
 
 ```bash
-# 1. 克隆仓库
 git clone https://github.com/liuzeming-yuxi/SuperClaw.git
-cd superclaw
-
-# 2. 运行安装脚本（以 root 运行）
+cd SuperClaw
 sudo bash scripts/install.sh
 ```
 
-就这样。脚本会自动完成：
-- 创建 OpenClaw skill 目录 + 符号链接
-- 部署 hook 脚本到 `~/.superclaw/hooks/`
-- 配置 Claude Code settings.json 的 hooks
-- 部署 superclaw 桥接脚本（以 root + IS_SANDBOX=1 模式运行）
-- 安装 superclaw OpenClaw skill
+The installer is idempotent — re-running it is safe and acts as an update.
 
-## 安装选项
+What it does:
+1. Symlinks OpenClaw skills (align, plan, execute, verify, deliver)
+2. Symlinks Claude Code hooks (progress + stop notifications)
+3. Symlinks `superclaw` CLI to PATH
+4. Generates `.env` template (if not exists)
+5. Writes version stamp to `~/.superclaw/installed.json`
 
-```bash
-# 只装 skill，不配置 hooks
-bash scripts/install.sh --skip-hooks
-
-# 自定义 superclaw 安装路径（默认 /root/.openclaw/workspace/bin）
-SUPERCLAW_CLI_DIR=/opt/superclaw sudo bash scripts/install.sh
-
-# 预览模式（只打印，不执行）
-bash scripts/install.sh --dry-run
-
-# 指定仓库路径（非标准位置克隆时）
-bash scripts/install.sh --repo-dir /path/to/superclaw
-```
-
-## 安装后配置
-
-### 1. superclaw 环境变量
-
-安装脚本会生成 `/root/.openclaw/workspace/bin/.env` 模板，你需要填入真实值：
+### Options
 
 ```bash
-sudo nano /root/.openclaw/workspace/bin/.env
+bash scripts/install.sh --skip-hooks   # Skip Claude Code hook configuration
+bash scripts/install.sh --dry-run      # Preview only, no changes
+bash scripts/install.sh --repo-dir /custom/path  # Non-standard repo location
 ```
+
+## Configure
+
+### 1. API credentials (required)
+
+Edit `/root/.openclaw/workspace/bin/.env`:
 
 ```ini
-# 你的 API 代理地址
 ANTHROPIC_BASE_URL=https://api.anthropic.com
-
-# 你的 API Token
-ANTHROPIC_AUTH_TOKEN=sk-xxx
-
-# 禁用非必要流量（代理场景推荐开启）
+ANTHROPIC_AUTH_TOKEN=sk-your-token-here
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 ```
 
-⚠️ 三个变量缺一不可。
+All three variables are required.
 
-### 2. 飞书通知（可选）
-
-如果希望 Claude Code 完成后自动飞书通知：
+### 2. Feishu notifications (optional)
 
 ```bash
-# 添加到 ~/.bashrc 或 ~/.zshrc
-export SUPERCLAW_FEISHU_TARGET="ou_你的open_id"
+export SUPERCLAW_FEISHU_TARGET="ou_your_open_id"
 ```
 
-获取 open_id：在飞书里问 OpenClaw "我的 open_id 是什么"。
-
-### 3. Superpowers 插件
-
-Claude Code 侧需要安装 Superpowers：
+### 3. Superpowers plugin (required)
 
 ```bash
-# 在 Claude Code 里执行
 claude /plugin install superpowers@claude-plugins-official
 ```
 
-## 验证安装
+## Verify
 
 ```bash
-# 跑完整测试套件
+# Full test suite
 bash tests/run-all.sh
 
-# 或单独验证安装状态
+# Or quick check
+superclaw version
+superclaw status
 bash tests/install/verify-install.sh
 ```
 
-## Updating
-
-After the initial install, use `superclaw update` to pull the latest changes and reinstall:
+## Update
 
 ```bash
-# Check if an update is available (no changes made)
-superclaw update --check
-
-# Pull latest and reinstall
-superclaw update
+superclaw update --check   # Preview available updates
+superclaw update           # Pull latest + reinstall
 ```
 
-## 快速开始
-
-在飞书里对 OpenClaw 说：
-
-> "用 SuperClaw 帮我写一个 hello world"
-
-## 故障排查
-
-| 症状 | 检查 |
-|---|---|
-| OpenClaw 不认识 superclaw skill | `ls ~/.openclaw/workspace/skills/superclaw-cli/SKILL.md` |
-| 符号链接断裂 | `ls -la ~/.openclaw/workspace/skills/superclaw-cli/references/` |
-| Hook 没触发 | `jq '.hooks' ~/.claude/settings.json` |
-| 飞书没收到通知 | 检查 `$SUPERCLAW_FEISHU_TARGET` 和 `openclaw gateway status` |
-| superclaw 调不通 | `superclaw version` 确认版本，再 `node /root/.openclaw/workspace/bin/superclaw.mjs status` |
-| Claude Code 权限问题 | 确认设置了 `IS_SANDBOX=1` 环境变量 |
-
-详细排查见 [superclaw 文档](superclaw/references/setup-guide.md)。
-
-## 卸载
+Or manually:
 
 ```bash
-# 移除 OpenClaw skills
-rm -rf ~/.openclaw/workspace/skills/superclaw
-rm -rf ~/.openclaw/workspace/skills/superclaw
+cd /path/to/SuperClaw
+git pull origin main
+sudo bash scripts/install.sh
+```
 
-# 移除 hooks
+## Troubleshoot
+
+| Symptom | Check |
+|---|---|
+| OpenClaw doesn't recognize superclaw skill | `ls ~/.openclaw/workspace/skills/superclaw/SKILL.md` |
+| Broken symlinks | `bash tests/install/verify-install.sh` |
+| Hooks not firing | `jq '.hooks' ~/.claude/settings.json` |
+| No Feishu notifications | `echo $SUPERCLAW_FEISHU_TARGET` — must be set |
+| superclaw command not found | `which superclaw` — should be `/usr/local/bin/superclaw` |
+| superclaw fails to run | `superclaw version` — shows installed vs repo version |
+| Claude Code permission error | Confirm `IS_SANDBOX=1` is set (installer handles this) |
+| Version mismatch | `superclaw update` to sync |
+
+## Uninstall
+
+```bash
+# Remove skills
+rm -rf ~/.openclaw/workspace/skills/superclaw
+rm -rf ~/.openclaw/workspace/skills/superclaw-cli
+
+# Remove hooks and state
 rm -rf ~/.superclaw
 
-# 移除 Claude Code hooks 配置（手动编辑）
-# jq 'del(.hooks.Stop[] | select(.command | contains("superclaw")))' ~/.claude/settings.json
+# Remove CLI
+rm -f /usr/local/bin/superclaw
+rm -f /root/.openclaw/workspace/bin/superclaw.mjs
+
+# Remove hook config from Claude Code (manual edit)
+# jq 'del(.hooks.Stop[] | select(.hooks[].command | contains("superclaw")))' ~/.claude/settings.json
 ```
-
-## 给 OpenClaw 的安装指令
-
-如果你是 OpenClaw 实例，按以下步骤安装：
-
-1. 确认前置条件（`node --version`, `jq --version`, `openclaw --version`）
-2. 克隆仓库：`git clone https://github.com/liuzeming-yuxi/SuperClaw.git`
-3. 执行安装：`sudo bash scripts/install.sh`
-4. 编辑 `.env`：`sudo nano /root/.openclaw/workspace/bin/.env`
-5. 验证：`bash tests/run-all.sh`
-
-不需要手动创建任何目录或符号链接，脚本全包了。
