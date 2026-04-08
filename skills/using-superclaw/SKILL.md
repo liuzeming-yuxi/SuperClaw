@@ -170,10 +170,10 @@ session 命名：`superclaw-<feature>`（不带阶段前缀）。
 
 ```bash
 # 短任务（< 5 分钟）
-exec timeout=300: node /root/.openclaw/workspace/bin/cc-delegate.mjs exec --timeout 300 --prompt "..."
+exec timeout=300: cc-delegate exec --timeout 300 --prompt "..."
 
 # 长任务（5-40 分钟，典型的 execute 阶段）
-exec timeout=2400: node /root/.openclaw/workspace/bin/cc-delegate.mjs exec --timeout 2400 --prompt "..."
+exec timeout=2400: cc-delegate exec --timeout 2400 --prompt "..."
 ```
 
 **exec timeout 必须 >= cc-delegate 的 --timeout 值。**
@@ -189,7 +189,7 @@ exec timeout=5: tail -5 ~/.superclaw/state/tool_log.jsonl
 
 CC 完成后，查看产出：
 ```bash
-exec timeout=30: node /root/.openclaw/workspace/bin/cc-delegate.mjs session show --name <name> --cwd <path> --last 3
+exec timeout=30: cc-delegate session show --name <name> --cwd <path> --last 3
 ```
 
 ### 已知问题：用户 /stop 导致 Gateway 崩溃

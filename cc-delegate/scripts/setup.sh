@@ -27,6 +27,15 @@ mkdir -p "${INSTALL_DIR}/state"
 cp "${SCRIPT_DIR}/../cc-delegate.mjs" "${INSTALL_DIR}/cc-delegate.mjs"
 chmod +x "${INSTALL_DIR}/cc-delegate.mjs"
 
+# Create wrapper script for short command name
+WRAPPER="/usr/local/bin/cc-delegate"
+cat > "$WRAPPER" << WRAPEOF
+#!/bin/bash
+exec node "${INSTALL_DIR}/cc-delegate.mjs" "\$@"
+WRAPEOF
+chmod +x "$WRAPPER"
+ok "Created wrapper: cc-delegate → ${INSTALL_DIR}/cc-delegate.mjs"
+
 # ─── Generate .env template ──────────────────────────────────────────────────
 
 ENV_FILE="${INSTALL_DIR}/.env"

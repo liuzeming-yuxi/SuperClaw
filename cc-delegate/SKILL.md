@@ -44,7 +44,7 @@ All commands run as root with IS_SANDBOX=1. Run via `exec`.
 ### One-shot task (exec)
 
 ```bash
-node /root/.openclaw/workspace/bin/cc-delegate.mjs exec \
+cc-delegate exec \
   --cwd /path/to/project \
   --prompt "your coding task description"
 ```
@@ -54,7 +54,7 @@ Default model is `opus`. Override with `--model sonnet`.
 ### Start a named session
 
 ```bash
-node /root/.openclaw/workspace/bin/cc-delegate.mjs session start \
+cc-delegate session start \
   --name my-session \
   --cwd /path/to/project \
   --prompt "initial task"
@@ -66,7 +66,7 @@ and records the session in a local manifest for tracking.
 ### Continue a session
 
 ```bash
-node /root/.openclaw/workspace/bin/cc-delegate.mjs session continue \
+cc-delegate session continue \
   --name my-session \
   --cwd /path/to/project \
   --prompt "next task"
@@ -78,7 +78,7 @@ originally created through the wrapper can be continued (prevents model drift).
 ### List sessions
 
 ```bash
-node /root/.openclaw/workspace/bin/cc-delegate.mjs session list
+cc-delegate session list
 ```
 
 ### Show session context
@@ -86,7 +86,7 @@ node /root/.openclaw/workspace/bin/cc-delegate.mjs session list
 View the full conversation history of a session in Markdown format:
 
 ```bash
-node /root/.openclaw/workspace/bin/cc-delegate.mjs session show \
+cc-delegate session show \
   --name my-session \
   --cwd /path/to/project
 ```
@@ -94,7 +94,7 @@ node /root/.openclaw/workspace/bin/cc-delegate.mjs session show \
 Show only the last N turns:
 
 ```bash
-node /root/.openclaw/workspace/bin/cc-delegate.mjs session show \
+cc-delegate session show \
   --name my-session \
   --cwd /path/to/project \
   --last 5
@@ -103,7 +103,7 @@ node /root/.openclaw/workspace/bin/cc-delegate.mjs session show \
 ### Check status
 
 ```bash
-node /root/.openclaw/workspace/bin/cc-delegate.mjs status
+cc-delegate status
 ```
 
 ## Workflow
@@ -164,10 +164,10 @@ When calling cc-delegate via the `exec` tool, you **MUST** set a sufficient time
 
 ```bash
 # BAD — default 5s timeout will kill cc-delegate immediately
-exec: node /root/.openclaw/workspace/bin/cc-delegate.mjs exec --prompt "..."
+exec: cc-delegate exec --prompt "..."
 
 # GOOD — set exec timeout to match --timeout
-exec timeout=2400: node /root/.openclaw/workspace/bin/cc-delegate.mjs exec --timeout 2400 --prompt "..."
+exec timeout=2400: cc-delegate exec --timeout 2400 --prompt "..."
 ```
 
 The `exec` tool timeout and cc-delegate's `--timeout` are DIFFERENT things:
@@ -180,21 +180,21 @@ The `exec` tool timeout and cc-delegate's `--timeout` are DIFFERENT things:
 
 **Short tasks (< 5 min):**
 ```bash
-exec timeout=300: node /root/.openclaw/workspace/bin/cc-delegate.mjs exec \
+exec timeout=300: cc-delegate exec \
   --cwd /path/to/project --model sonnet --timeout 300 \
   --prompt "simple task"
 ```
 
 **Long tasks (5-40 min):**
 ```bash
-exec timeout=2400: node /root/.openclaw/workspace/bin/cc-delegate.mjs exec \
+exec timeout=2400: cc-delegate exec \
   --cwd /path/to/project --model opus --timeout 2400 \
   --prompt "complex task"
 ```
 
 **Very long tasks (> 40 min) — fire and forget:**
 ```bash
-exec timeout=10: setsid node /root/.openclaw/workspace/bin/cc-delegate.mjs exec \
+exec timeout=10: setsid cc-delegate exec \
   --cwd /path/to/project --model opus --timeout 7200 \
   --file /tmp/prompt.md > /tmp/cc-output.log 2>&1 &
 echo "CC started, PID=$!"
@@ -218,7 +218,7 @@ exec timeout=5: tail -5 ~/.superclaw/state/tool_log.jsonl
 
 View session context after completion:
 ```bash
-exec timeout=30: node /root/.openclaw/workspace/bin/cc-delegate.mjs session show \
+exec timeout=30: cc-delegate session show \
   --name my-session --cwd /path/to/project --last 5
 ```
 

@@ -75,11 +75,11 @@ via `su`, and avoids permission issues with project directories.
 
 ```bash
 # Should show status:
-node /root/.openclaw/workspace/bin/cc-delegate.mjs status
+cc-delegate status
 
 # Smoke test (should create a file):
 mkdir -p /tmp/cc-test
-node /root/.openclaw/workspace/bin/cc-delegate.mjs exec --cwd /tmp/cc-test --prompt "Create hello.txt with content: it works"
+cc-delegate exec --cwd /tmp/cc-test --prompt "Create hello.txt with content: it works"
 cat /tmp/cc-test/hello.txt
 ```
 
