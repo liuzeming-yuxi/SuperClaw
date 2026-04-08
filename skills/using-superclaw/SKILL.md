@@ -58,6 +58,53 @@ align → plan → execute → verify → deliver
 | 独立验收 | 自我验证（L1）|
 | 用人话交付 | 输出技术报告 |
 
+<HARD-GATE>
+
+## CC Prompt 铁律
+
+**CC 有自己的 superpowers skill 体系（TDD、subagent 驱动、代码审查等）。你不要替 CC 做技术决策。**
+
+给 CC 的 prompt 只需要三样东西：
+1. **用哪个 superpowers skill**（如 `superpowers:subagent-driven-development`）
+2. **plan 文件路径**
+3. **简短的上下文**（spec 路径、项目目录）
+
+**绝对禁止：**
+- ❌ 在 prompt 里写完整的实现方案、代码结构、技术细节
+- ❌ 把 spec 和 plan 的全文内联到 prompt 里（给路径让 CC 自己读）
+- ❌ 自己编排 task 执行顺序（CC 的 subagent-driven-development 会自己编排）
+- ❌ 省略 superpowers skill 名称，让 CC "自由发挥"
+
+**正确的 execute prompt 模板：**
+```
+你是 SuperClaw execute 阶段的执行者。
+
+## 你的任务
+使用 superpowers:subagent-driven-development 执行 plan。
+
+## 关键文件
+- spec: {spec_path}
+- plan: {plan_path}
+
+## 要求
+- 读 spec 和 plan 再开始
+- 每个 task 走 TDD + 双阶段 review
+- 完成后写执行报告并 commit
+```
+
+**错误示范（你之前干过的）：**
+```
+## 要求
+1. 严格按 plan.md 的 14 个 Task 和 5 个 Phase 顺序实现
+2. 所有代码写在一个 index.html 文件中
+3. 零外部依赖（图片、音频全部代码生成）
+4. 完成后确认文件能在浏览器中打开运行
+...
+```
+↑ 这些全是 plan 里已经写好的内容，你复述一遍没有任何价值，反而占用 CC 的上下文窗口。
+
+</HARD-GATE>
+
 **plan 阶段的特殊规则**：plan 是双向的。你发 spec 给 Claude Code，CC 探索代码库后提 plan，你 review plan 的产品合理性（不 review 技术细节），然后交给用户 approve。
 
 ## 信任模型
@@ -98,6 +145,7 @@ session 命名：`superclaw-<feature>`（不带阶段前缀）。
 | "我直接告诉 CC 怎么实现" | 你只管 what，CC 管 how |
 | "用户等太久了，先交付再说" | 不通过 verify 的不交付 |
 | "这个 bug 我自己修更快" | 你修了谁来验？让 CC 修，你验 |
+| "我把完整需求写进 prompt" | 只给 skill 名 + plan 路径，CC 自己读 |
 
 ## 指令优先级
 
