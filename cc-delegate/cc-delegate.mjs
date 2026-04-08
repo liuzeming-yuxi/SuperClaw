@@ -297,17 +297,7 @@ function startDelegateHeartbeat(opts) {
   heartbeatTimer = setInterval(() => {
     const elapsedMin = Math.round((Date.now() - startTime) / 60000);
 
-    // Count recent tool calls from log
-    let toolCount = 0;
-    try {
-      const logPath = resolve(homedir(), ".superclaw", "state", "tool_log.jsonl");
-      if (existsSync(logPath)) {
-        const content = readFileSync(logPath, "utf8");
-        toolCount = (content.match(/"session_id"/g) || []).length;
-      }
-    } catch { /* ok */ }
-
-    const message = `📡 CC 进度 | ${sessionName} | ${cwdBase}\n⏱ 已运行 ${elapsedMin}m | 工具调用 ${toolCount} 次\n💭 (cc-delegate heartbeat)`;
+    const message = `📡 CC 进度 | ${sessionName} | ${cwdBase}\n⏱ 已运行 ${elapsedMin}m\n💭 (cc-delegate heartbeat — CC 可能在 thinking)`;
 
     // Fire and forget — don't block the event loop
     const cp = spawn(oclawPath, [
