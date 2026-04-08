@@ -155,6 +155,10 @@ OpenClaw + Claude Code 的超级编码体。人管方向，OpenClaw 管对齐和
 | verify | `references/verify.md` | execute 完成 |
 | deliver | `references/deliver.md` | verify 通过 |
 
+## 必读
+
+**开始任何对话前，先读 `references/using-superclaw.md`。** 这里定义了你的角色边界、CC prompt 铁律、session 复用规则。
+
 **默认从 align 开始。** 如果用户明确说"跳过 align，直接 plan"等，按用户指令走。
 SKILLEOF
 fi
@@ -171,6 +175,16 @@ for phase in align plan execute verify deliver; do
     fail "Source not found: $SRC"
   fi
 done
+
+# Symlink meta-skill (using-superclaw teaches OpenClaw its role and boundaries)
+SRC="$REPO_DIR/skills/using-superclaw/SKILL.md"
+DST="$SKILL_DIR/references/using-superclaw.md"
+if [[ -f "$SRC" ]]; then
+  run ln -sf "$SRC" "$DST"
+  ok "Linked: using-superclaw → $SRC"
+else
+  fail "Source not found: $SRC"
+fi
 
 # ─── Part 2: Hooks ───────────────────────────────────────────────────────────
 
