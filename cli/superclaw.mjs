@@ -14,6 +14,7 @@ import { homedir } from "node:os";
 import { dirname, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
+import { runDoctor } from "./doctor.mjs";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -564,6 +565,7 @@ function printUsage() {
     "  superclaw status",
     "  superclaw version",
     "  superclaw update [--check]",
+    "  superclaw doctor [--fix] [--verbose]",
     "",
     "Environment:",
     "  Reads .env from script directory for ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, etc.",
@@ -592,6 +594,8 @@ function parseArgs(argv) {
     checkOnly: false,     // --check (for update)
     signal: null,         // --signal SIGTERM|SIGKILL (for session stop)
     dryRun: false,        // --dry-run (for session clean)
+    fix: false,           // --fix (for doctor)
+    verbose: false,       // --verbose (for doctor)
   };
 
   while (args.length > 0) {
@@ -632,6 +636,10 @@ function parseArgs(argv) {
       opts.command = "update";
       continue;
     }
+    if (arg === "doctor") {
+      opts.command = "doctor";
+      continue;
+    }
 
     // Flags
     if (arg === "--cwd") { opts.cwd = args.shift(); continue; }
@@ -647,6 +655,8 @@ function parseArgs(argv) {
     if (arg === "--check") { opts.checkOnly = true; continue; }
     if (arg === "--signal") { opts.signal = args.shift(); continue; }
     if (arg === "--dry-run") { opts.dryRun = true; continue; }
+    if (arg === "--fix") { opts.fix = true; continue; }
+    if (arg === "--verbose") { opts.verbose = true; continue; }
 
     // Treat unknown as prompt text
     const rest = [arg, ...args];
@@ -1308,10 +1318,7 @@ async function cmdSessionContinue(opts, acpx) {
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
-  // Step 1: Ensure env vars are set
-  ensureEnv();
-
-  // Step 2: Parse args
+  // Step 1: Parse args (before ensureEnv so doctor/version can run without .env)
   const opts = parseArgs(process.argv.slice(2));
 
   if (!opts.command) {
@@ -1319,8 +1326,13 @@ async function main() {
     process.exit(1);
   }
 
-  // Step 3: Resolve acpx
-  const acpx = resolveAcpx();
+  // Step 2: Ensure env vars — skip for commands that don't need API credentials
+  if (opts.command !== "doctor" && opts.command !== "version") {
+    ensureEnv();
+  }
+
+  // Step 3: Resolve acpx (lazy — only needed for commands that use it)
+  const acpx = (opts.command !== "doctor" && opts.command !== "version") ? resolveAcpx() : null;
 
   // Step 4: Dispatch
   switch (opts.command) {
@@ -1335,6 +1347,17 @@ async function main() {
     case "update":
       await cmdUpdate(opts);
       break;
+
+    case "doctor": {
+      const failCount = await runDoctor({
+        fix: opts.fix,
+        verbose: opts.verbose,
+        binDir: SCRIPT_DIR,
+        repoDir: REPO_DIR,
+        installedJsonPath: INSTALLED_JSON_PATH,
+      });
+      process.exit(failCount > 0 ? 1 : 0);
+    }
 
     case "exec":
       await cmdExec(opts, acpx);
@@ -1386,7 +1409,7 @@ if (isMainModule) {
   const needsIsolation = !process.env.SUPERCLAW_SETSID_DONE
     && process.argv.some((a) => a === "exec" || a === "session");
   const isShortSubcommand = process.argv.some(
-    (a) => a === "status" || a === "list" || a === "show" || a === "ps" || a === "stop" || a === "clean" || a === "delete" || a === "version" || a === "update"
+    (a) => a === "status" || a === "list" || a === "show" || a === "ps" || a === "stop" || a === "clean" || a === "delete" || a === "version" || a === "update" || a === "doctor"
   );
 
   if (needsIsolation && !isShortSubcommand) {
